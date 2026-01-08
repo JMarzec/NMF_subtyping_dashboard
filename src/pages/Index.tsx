@@ -1,14 +1,44 @@
+import { useState, useMemo } from "react";
 import { SummaryCards } from "@/components/bioinformatics/SummaryCards";
 import { SubtypeDistribution } from "@/components/bioinformatics/SubtypeDistribution";
 import { ClusterScatter } from "@/components/bioinformatics/ClusterScatter";
 import { ExpressionHeatmap } from "@/components/bioinformatics/ExpressionHeatmap";
 import { MarkerGenesTable } from "@/components/bioinformatics/MarkerGenesTable";
 import { CopheneticPlot } from "@/components/bioinformatics/CopheneticPlot";
-import { nmfSummary, sampleResults, markerGenes, generateHeatmapData } from "@/data/mockNmfData";
+import { JsonUploader } from "@/components/bioinformatics/JsonUploader";
+import { 
+  nmfSummary as defaultSummary, 
+  sampleResults as defaultSamples, 
+  markerGenes as defaultMarkerGenes, 
+  generateHeatmapData,
+  NmfSummary,
+  SampleResult,
+  MarkerGene
+} from "@/data/mockNmfData";
 import { Dna } from "lucide-react";
 
+interface NmfData {
+  summary: NmfSummary;
+  samples: SampleResult[];
+  markerGenes: MarkerGene[];
+  heatmapData?: {
+    genes: string[];
+    samples: string[];
+    sampleSubtypes: string[];
+    values: number[][];
+  };
+}
+
 const Index = () => {
-  const heatmapData = generateHeatmapData();
+  const [data, setData] = useState<NmfData>({
+    summary: defaultSummary,
+    samples: defaultSamples,
+    markerGenes: defaultMarkerGenes,
+  });
+
+  const heatmapData = useMemo(() => {
+    return data.heatmapData || generateHeatmapData();
+  }, [data.heatmapData]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -29,13 +59,18 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Summary Cards */}
-        <SummaryCards summary={nmfSummary} />
+        {/* Upload Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <JsonUploader onDataLoaded={setData} />
+          <div className="lg:col-span-3">
+            <SummaryCards summary={data.summary} />
+          </div>
+        </div>
 
         {/* Charts Row 1 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SubtypeDistribution subtypeCounts={nmfSummary.subtype_counts} />
-          <ClusterScatter samples={sampleResults} />
+          <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} />
+          <ClusterScatter samples={data.samples} />
         </div>
 
         {/* Charts Row 2 */}
@@ -47,7 +82,7 @@ const Index = () => {
         </div>
 
         {/* Marker Genes */}
-        <MarkerGenesTable genes={markerGenes} />
+        <MarkerGenesTable genes={data.markerGenes} />
       </main>
 
       {/* Footer */}
