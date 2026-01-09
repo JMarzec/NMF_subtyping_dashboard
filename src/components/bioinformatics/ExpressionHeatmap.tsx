@@ -1,5 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useMemo, useState } from "react";
+import { Download } from "lucide-react";
 
 interface HeatmapData {
   genes: string[];
@@ -26,12 +30,23 @@ const getHeatmapColor = (value: number, min: number, max: number) => {
   }
 };
 
+// Z-score normalize rows (genes)
+const zScoreNormalize = (values: number[][]): number[][] => {
+  return values.map(row => {
+    const mean = row.reduce((sum, v) => sum + v, 0) / row.length;
+    const std = Math.sqrt(row.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / row.length);
+    return std === 0 ? row.map(() => 0) : row.map(v => (v - mean) / std);
+  });
+};
+
 export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProps) => {
   const [hoveredCell, setHoveredCell] = useState<{ gene: string; sample: string; value: number; subtype: string } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [useZScore, setUseZScore] = useState(true);
 
-  const { minVal, maxVal, sortedIndices, uniqueSubtypes } = useMemo(() => {
-    const allValues = data.values.flat();
+  const { displayValues, minVal, maxVal, sortedIndices, uniqueSubtypes } = useMemo(() => {
+    const normalizedValues = useZScore ? zScoreNormalize(data.values) : data.values;
+    const allValues = normalizedValues.flat();
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
     
@@ -43,8 +58,8 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
     
     const subtypes = [...new Set(data.sampleSubtypes)].sort();
     
-    return { minVal: min, maxVal: max, sortedIndices: indices, uniqueSubtypes: subtypes };
-  }, [data]);
+    return { displayValues: normalizedValues, minVal: min, maxVal: max, sortedIndices: indices, uniqueSubtypes: subtypes };
+  }, [data, useZScore]);
 
   const cellWidth = Math.max(4, Math.min(10, 600 / data.samples.length));
   const cellHeight = 12;
@@ -59,15 +74,52 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
     setHoveredCell({
       gene: data.genes[geneIdx],
       sample: data.samples[sampleIdx],
-      value: data.values[geneIdx][sampleIdx],
+      value: displayValues[geneIdx][sampleIdx],
       subtype: data.sampleSubtypes[sampleIdx],
     });
   };
 
+  const exportToCSV = () => {
+    const header = ["Gene", ...sortedIndices.map(idx => data.samples[idx])];
+    const subtypeRow = ["Subtype", ...sortedIndices.map(idx => data.sampleSubtypes[idx])];
+    const dataRows = data.genes.map((gene, geneIdx) => [
+      gene,
+      ...sortedIndices.map(sampleIdx => displayValues[geneIdx][sampleIdx].toFixed(4))
+    ]);
+    
+    const csvContent = [header, subtypeRow, ...dataRows]
+      .map(row => row.join(","))
+      .join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `heatmap_${useZScore ? "zscore" : "raw"}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm relative">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg">Expression Heatmap (Top Marker Genes)</CardTitle>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Switch
+              id="zscore-toggle"
+              checked={useZScore}
+              onCheckedChange={setUseZScore}
+            />
+            <Label htmlFor="zscore-toggle" className="text-xs text-muted-foreground">
+              Z-score
+            </Label>
+          </div>
+          <Button variant="outline" size="sm" onClick={exportToCSV}>
+            <Download className="h-4 w-4 mr-1" />
+            CSV
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
@@ -103,7 +155,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
             
             {/* Heatmap cells */}
             <div>
-              {data.values.map((row, geneIdx) => (
+              {displayValues.map((row, geneIdx) => (
                 <div key={geneIdx} className="flex">
                   {sortedIndices.map((sampleIdx, i) => (
                     <div
@@ -125,7 +177,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
           
           {/* Color scale legend */}
           <div className="flex items-center justify-center mt-4 gap-2">
-            <span className="text-xs text-muted-foreground">Low</span>
+            <span className="text-xs text-muted-foreground">{useZScore ? "Low (Z)" : "Low"}</span>
             <div className="flex h-3">
               {Array.from({ length: 50 }).map((_, i) => (
                 <div
@@ -137,7 +189,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
                 />
               ))}
             </div>
-            <span className="text-xs text-muted-foreground">High</span>
+            <span className="text-xs text-muted-foreground">{useZScore ? "High (Z)" : "High"}</span>
           </div>
           
           {/* Subtype legend */}
@@ -167,7 +219,9 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
             <p className="text-sm font-medium">{hoveredCell.sample}</p>
             <p className="text-xs text-muted-foreground">Gene: {hoveredCell.gene}</p>
             <p className="text-xs text-muted-foreground">Subtype: {hoveredCell.subtype}</p>
-            <p className="text-xs text-muted-foreground">Expression: {hoveredCell.value.toFixed(2)}</p>
+            <p className="text-xs text-muted-foreground">
+              {useZScore ? "Z-score" : "Expression"}: {hoveredCell.value.toFixed(2)}
+            </p>
           </div>
         )}
       </CardContent>
