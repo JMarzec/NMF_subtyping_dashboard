@@ -5,26 +5,13 @@ import { useState } from "react";
 
 interface MarkerGenesTableProps {
   genes: MarkerGene[];
+  subtypeColors: Record<string, string>;
 }
 
-const SUBTYPE_COLORS: Record<string, string> = {
-  "Subtype_1": "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  "Subtype_2": "bg-violet-500/20 text-violet-400 border-violet-500/30",
-  "Subtype_3": "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  "Subtype_4": "bg-orange-500/20 text-orange-400 border-orange-500/30",
-};
-
-const SUBTYPE_LABELS: Record<string, string> = {
-  "Subtype_1": "Proliferative",
-  "Subtype_2": "Epithelial",
-  "Subtype_3": "Mesenchymal",
-  "Subtype_4": "Immune",
-};
-
-export const MarkerGenesTable = ({ genes }: MarkerGenesTableProps) => {
+export const MarkerGenesTable = ({ genes, subtypeColors }: MarkerGenesTableProps) => {
   const [selectedSubtype, setSelectedSubtype] = useState<string | null>(null);
   
-  const subtypes = [...new Set(genes.map(g => g.subtype))];
+  const subtypes = [...new Set(genes.map(g => g.subtype))].sort();
   const filteredGenes = selectedSubtype 
     ? genes.filter(g => g.subtype === selectedSubtype)
     : genes;
@@ -47,12 +34,17 @@ export const MarkerGenesTable = ({ genes }: MarkerGenesTableProps) => {
               variant="outline"
               className={`cursor-pointer transition-all ${
                 selectedSubtype === subtype 
-                  ? SUBTYPE_COLORS[subtype] 
+                  ? "border-current" 
                   : "hover:bg-muted"
               }`}
+              style={{ 
+                backgroundColor: selectedSubtype === subtype ? `${subtypeColors[subtype]}33` : undefined,
+                color: subtypeColors[subtype],
+                borderColor: selectedSubtype === subtype ? subtypeColors[subtype] : undefined,
+              }}
               onClick={() => setSelectedSubtype(subtype)}
             >
-              {SUBTYPE_LABELS[subtype]}
+              {subtype}
             </Badge>
           ))}
         </div>
@@ -74,16 +66,26 @@ export const MarkerGenesTable = ({ genes }: MarkerGenesTableProps) => {
                     <span className="font-mono text-sm font-medium">{gene.gene}</span>
                   </td>
                   <td className="py-2 px-3">
-                    <Badge variant="outline" className={SUBTYPE_COLORS[gene.subtype]}>
-                      {SUBTYPE_LABELS[gene.subtype]}
+                    <Badge 
+                      variant="outline" 
+                      style={{ 
+                        backgroundColor: `${subtypeColors[gene.subtype]}33`,
+                        color: subtypeColors[gene.subtype],
+                        borderColor: `${subtypeColors[gene.subtype]}50`,
+                      }}
+                    >
+                      {gene.subtype}
                     </Badge>
                   </td>
                   <td className="py-2 px-3 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
                         <div 
-                          className="h-full bg-gradient-to-r from-primary to-primary/60 rounded-full"
-                          style={{ width: `${gene.weight * 100}%` }}
+                          className="h-full rounded-full"
+                          style={{ 
+                            width: `${gene.weight * 100}%`,
+                            backgroundColor: subtypeColors[gene.subtype],
+                          }}
                         />
                       </div>
                       <span className="text-sm text-muted-foreground font-mono w-12 text-right">

@@ -84,7 +84,7 @@ const Index = () => {
         {/* Survival Analysis */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <SurvivalCurve data={data.survivalData || []} subtypeColors={subtypeColors} />
-          <MarkerGenesTable genes={data.markerGenes} />
+          <MarkerGenesTable genes={data.markerGenes} subtypeColors={subtypeColors} />
         </div>
       </main>
 
