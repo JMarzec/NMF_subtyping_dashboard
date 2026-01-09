@@ -5,28 +5,21 @@ import { useMemo } from "react";
 
 interface ClusterScatterProps {
   samples: SampleResult[];
+  subtypeColors: Record<string, string>;
 }
 
-const SUBTYPE_COLORS: Record<string, string> = {
-  "Subtype_1": "hsl(221, 83%, 53%)",
-  "Subtype_2": "hsl(262, 83%, 58%)",
-  "Subtype_3": "hsl(142, 71%, 45%)",
-  "Subtype_4": "hsl(24, 95%, 53%)",
-};
-
-const SUBTYPE_LABELS: Record<string, string> = {
-  "Subtype_1": "Proliferative",
-  "Subtype_2": "Epithelial",
-  "Subtype_3": "Mesenchymal",
-  "Subtype_4": "Immune",
-};
-
-export const ClusterScatter = ({ samples }: ClusterScatterProps) => {
+export const ClusterScatter = ({ samples, subtypeColors }: ClusterScatterProps) => {
   // Simulate UMAP-like coordinates based on subtype scores
-  const scatterData = useMemo(() => {
-    return samples.map((sample, idx) => {
-      const subtypeNum = parseInt(sample.subtype.split("_")[1]);
-      const angle = ((subtypeNum - 1) / 4) * 2 * Math.PI + (Math.random() - 0.5) * 0.8;
+  const { scatterData, uniqueSubtypes } = useMemo(() => {
+    const subtypes = [...new Set(samples.map(s => s.subtype))].sort();
+    const subtypeAngles = new Map<string, number>();
+    subtypes.forEach((subtype, idx) => {
+      subtypeAngles.set(subtype, (idx / subtypes.length) * 2 * Math.PI);
+    });
+
+    const data = samples.map((sample) => {
+      const baseAngle = subtypeAngles.get(sample.subtype) || 0;
+      const angle = baseAngle + (Math.random() - 0.5) * 0.8;
       const radius = 2 + Math.random() * 1.5;
       
       return {
@@ -37,7 +30,25 @@ export const ClusterScatter = ({ samples }: ClusterScatterProps) => {
         sample_id: sample.sample_id,
       };
     });
+
+    return { scatterData: data, uniqueSubtypes: subtypes };
   }, [samples]);
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length > 0) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-card border border-border rounded-lg p-2 shadow-lg">
+          <p className="text-sm font-medium">{data.sample_id}</p>
+          <p className="text-xs text-muted-foreground">Subtype: {data.subtype}</p>
+          <p className="text-xs text-muted-foreground">
+            UMAP1: {data.x.toFixed(2)}, UMAP2: {data.y.toFixed(2)}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
@@ -65,23 +76,12 @@ export const ClusterScatter = ({ samples }: ClusterScatterProps) => {
                 axisLine={{ stroke: "hsl(var(--border))" }}
               />
               <ZAxis type="number" dataKey="z" range={[30, 60]} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "8px",
-                  fontSize: "12px",
-                }}
-                formatter={(value: any, name: string) => {
-                  if (name === "subtype") return [SUBTYPE_LABELS[value] || value, "Subtype"];
-                  return [value, name];
-                }}
-              />
+              <Tooltip content={<CustomTooltip />} />
               <Scatter data={scatterData}>
                 {scatterData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={SUBTYPE_COLORS[entry.subtype]}
+                    fill={subtypeColors[entry.subtype] || "hsl(var(--primary))"}
                     fillOpacity={0.7}
                   />
                 ))}
@@ -90,13 +90,13 @@ export const ClusterScatter = ({ samples }: ClusterScatterProps) => {
           </ResponsiveContainer>
         </div>
         <div className="flex flex-wrap gap-4 mt-4 justify-center">
-          {Object.entries(SUBTYPE_LABELS).map(([key, label]) => (
-            <div key={key} className="flex items-center gap-2">
+          {uniqueSubtypes.map((subtype) => (
+            <div key={subtype} className="flex items-center gap-2">
               <div
                 className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: SUBTYPE_COLORS[key] }}
+                style={{ backgroundColor: subtypeColors[subtype] || "hsl(var(--primary))" }}
               />
-              <span className="text-xs text-muted-foreground">{label}</span>
+              <span className="text-xs text-muted-foreground">{subtype}</span>
             </div>
           ))}
         </div>

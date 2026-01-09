@@ -5,40 +5,37 @@ import { ClusterScatter } from "@/components/bioinformatics/ClusterScatter";
 import { ExpressionHeatmap } from "@/components/bioinformatics/ExpressionHeatmap";
 import { MarkerGenesTable } from "@/components/bioinformatics/MarkerGenesTable";
 import { CopheneticPlot } from "@/components/bioinformatics/CopheneticPlot";
-import { JsonUploader } from "@/components/bioinformatics/JsonUploader";
+import { JsonUploader, NmfData } from "@/components/bioinformatics/JsonUploader";
+import { SurvivalCurve } from "@/components/bioinformatics/SurvivalCurve";
 import { 
   nmfSummary as defaultSummary, 
   sampleResults as defaultSamples, 
   markerGenes as defaultMarkerGenes, 
   generateHeatmapData,
-  NmfSummary,
-  SampleResult,
-  MarkerGene
+  generateSubtypeColors,
+  defaultRankMetrics,
+  defaultSurvivalData,
 } from "@/data/mockNmfData";
 import { Dna } from "lucide-react";
-
-interface NmfData {
-  summary: NmfSummary;
-  samples: SampleResult[];
-  markerGenes: MarkerGene[];
-  heatmapData?: {
-    genes: string[];
-    samples: string[];
-    sampleSubtypes: string[];
-    values: number[][];
-  };
-}
 
 const Index = () => {
   const [data, setData] = useState<NmfData>({
     summary: defaultSummary,
     samples: defaultSamples,
     markerGenes: defaultMarkerGenes,
+    rankMetrics: defaultRankMetrics,
+    survivalData: defaultSurvivalData,
   });
 
   const heatmapData = useMemo(() => {
     return data.heatmapData || generateHeatmapData();
   }, [data.heatmapData]);
+
+  // Generate colors dynamically from subtype names in data
+  const subtypeColors = useMemo(() => {
+    const subtypes = Object.keys(data.summary.subtype_counts);
+    return generateSubtypeColors(subtypes);
+  }, [data.summary.subtype_counts]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -51,7 +48,7 @@ const Index = () => {
             </div>
             <div>
               <h1 className="text-xl font-bold">NMF Subtyping Dashboard</h1>
-              <p className="text-sm text-muted-foreground">GSE62254 Gastric Cancer Molecular Subtypes</p>
+              <p className="text-sm text-muted-foreground">{data.summary.dataset} Molecular Subtypes</p>
             </div>
           </div>
         </div>
@@ -69,20 +66,26 @@ const Index = () => {
 
         {/* Charts Row 1 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} />
-          <ClusterScatter samples={data.samples} />
+          <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} subtypeColors={subtypeColors} />
+          <ClusterScatter samples={data.samples} subtypeColors={subtypeColors} />
         </div>
 
         {/* Charts Row 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <ExpressionHeatmap data={heatmapData} />
+            <ExpressionHeatmap data={heatmapData} subtypeColors={subtypeColors} />
           </div>
-          <CopheneticPlot />
+          <CopheneticPlot 
+            rankMetrics={data.rankMetrics} 
+            optimalRank={data.summary.optimal_rank} 
+          />
         </div>
 
-        {/* Marker Genes */}
-        <MarkerGenesTable genes={data.markerGenes} />
+        {/* Survival Analysis */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SurvivalCurve data={data.survivalData || []} subtypeColors={subtypeColors} />
+          <MarkerGenesTable genes={data.markerGenes} />
+        </div>
       </main>
 
       {/* Footer */}

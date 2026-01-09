@@ -3,27 +3,14 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recha
 
 interface SubtypeDistributionProps {
   subtypeCounts: Record<string, number>;
+  subtypeColors: Record<string, string>;
 }
 
-const SUBTYPE_COLORS = [
-  "hsl(221, 83%, 53%)",  // Blue
-  "hsl(262, 83%, 58%)",  // Purple
-  "hsl(142, 71%, 45%)",  // Green
-  "hsl(24, 95%, 53%)",   // Orange
-];
-
-const SUBTYPE_LABELS: Record<string, string> = {
-  "Subtype_1": "Proliferative",
-  "Subtype_2": "Epithelial",
-  "Subtype_3": "Mesenchymal",
-  "Subtype_4": "Immune",
-};
-
-export const SubtypeDistribution = ({ subtypeCounts }: SubtypeDistributionProps) => {
-  const data = Object.entries(subtypeCounts).map(([key, value], index) => ({
-    name: SUBTYPE_LABELS[key] || key,
+export const SubtypeDistribution = ({ subtypeCounts, subtypeColors }: SubtypeDistributionProps) => {
+  const data = Object.entries(subtypeCounts).map(([key, value]) => ({
+    name: key,
     value,
-    color: SUBTYPE_COLORS[index % SUBTYPE_COLORS.length],
+    color: subtypeColors[key] || "hsl(var(--primary))",
   }));
 
   const total = data.reduce((sum, d) => sum + d.value, 0);

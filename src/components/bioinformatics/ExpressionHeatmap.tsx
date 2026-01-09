@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 interface HeatmapData {
   genes: string[];
@@ -10,14 +10,8 @@ interface HeatmapData {
 
 interface ExpressionHeatmapProps {
   data: HeatmapData;
+  subtypeColors: Record<string, string>;
 }
-
-const SUBTYPE_COLORS: Record<string, string> = {
-  "Subtype_1": "#3b82f6",
-  "Subtype_2": "#8b5cf6",
-  "Subtype_3": "#22c55e",
-  "Subtype_4": "#f97316",
-};
 
 const getHeatmapColor = (value: number, min: number, max: number) => {
   const normalized = (value - min) / (max - min);
@@ -32,8 +26,11 @@ const getHeatmapColor = (value: number, min: number, max: number) => {
   }
 };
 
-export const ExpressionHeatmap = ({ data }: ExpressionHeatmapProps) => {
-  const { minVal, maxVal, sortedIndices } = useMemo(() => {
+export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProps) => {
+  const [hoveredCell, setHoveredCell] = useState<{ gene: string; sample: string; value: number; subtype: string } | null>(null);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+
+  const { minVal, maxVal, sortedIndices, uniqueSubtypes } = useMemo(() => {
     const allValues = data.values.flat();
     const min = Math.min(...allValues);
     const max = Math.max(...allValues);
@@ -44,14 +41,31 @@ export const ExpressionHeatmap = ({ data }: ExpressionHeatmapProps) => {
       .sort((a, b) => a.subtype.localeCompare(b.subtype))
       .map(item => item.idx);
     
-    return { minVal: min, maxVal: max, sortedIndices: indices };
+    const subtypes = [...new Set(data.sampleSubtypes)].sort();
+    
+    return { minVal: min, maxVal: max, sortedIndices: indices, uniqueSubtypes: subtypes };
   }, [data]);
 
   const cellWidth = Math.max(4, Math.min(10, 600 / data.samples.length));
   const cellHeight = 12;
 
+  const handleCellHover = (
+    e: React.MouseEvent,
+    geneIdx: number,
+    sampleIdx: number
+  ) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top - 10 });
+    setHoveredCell({
+      gene: data.genes[geneIdx],
+      sample: data.samples[sampleIdx],
+      value: data.values[geneIdx][sampleIdx],
+      subtype: data.sampleSubtypes[sampleIdx],
+    });
+  };
+
   return (
-    <Card className="border-0 bg-card/50 backdrop-blur-sm">
+    <Card className="border-0 bg-card/50 backdrop-blur-sm relative">
       <CardHeader>
         <CardTitle className="text-lg">Expression Heatmap (Top Marker Genes)</CardTitle>
       </CardHeader>
@@ -65,8 +79,9 @@ export const ExpressionHeatmap = ({ data }: ExpressionHeatmapProps) => {
                 style={{
                   width: cellWidth,
                   height: 8,
-                  backgroundColor: SUBTYPE_COLORS[data.sampleSubtypes[idx]],
+                  backgroundColor: subtypeColors[data.sampleSubtypes[idx]] || "hsl(var(--primary))",
                 }}
+                title={`${data.samples[idx]} - ${data.sampleSubtypes[idx]}`}
               />
             ))}
           </div>
@@ -98,7 +113,9 @@ export const ExpressionHeatmap = ({ data }: ExpressionHeatmapProps) => {
                         height: cellHeight,
                         backgroundColor: getHeatmapColor(row[sampleIdx], minVal, maxVal),
                       }}
-                      title={`${data.genes[geneIdx]}: ${row[sampleIdx].toFixed(2)}`}
+                      className="cursor-pointer hover:ring-1 hover:ring-white hover:z-10"
+                      onMouseEnter={(e) => handleCellHover(e, geneIdx, sampleIdx)}
+                      onMouseLeave={() => setHoveredCell(null)}
                     />
                   ))}
                 </div>
@@ -125,16 +142,34 @@ export const ExpressionHeatmap = ({ data }: ExpressionHeatmapProps) => {
           
           {/* Subtype legend */}
           <div className="flex flex-wrap gap-4 mt-3 justify-center">
-            {Object.entries(SUBTYPE_COLORS).map(([key, color]) => (
-              <div key={key} className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded" style={{ backgroundColor: color }} />
-                <span className="text-xs text-muted-foreground">
-                  {key.replace("_", " ")}
-                </span>
+            {uniqueSubtypes.map((subtype) => (
+              <div key={subtype} className="flex items-center gap-2">
+                <div 
+                  className="w-3 h-3 rounded" 
+                  style={{ backgroundColor: subtypeColors[subtype] || "hsl(var(--primary))" }} 
+                />
+                <span className="text-xs text-muted-foreground">{subtype}</span>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Tooltip */}
+        {hoveredCell && (
+          <div
+            className="fixed z-50 bg-card border border-border rounded-lg p-2 shadow-lg pointer-events-none"
+            style={{
+              left: tooltipPos.x,
+              top: tooltipPos.y,
+              transform: "translate(-50%, -100%)",
+            }}
+          >
+            <p className="text-sm font-medium">{hoveredCell.sample}</p>
+            <p className="text-xs text-muted-foreground">Gene: {hoveredCell.gene}</p>
+            <p className="text-xs text-muted-foreground">Subtype: {hoveredCell.subtype}</p>
+            <p className="text-xs text-muted-foreground">Expression: {hoveredCell.value.toFixed(2)}</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

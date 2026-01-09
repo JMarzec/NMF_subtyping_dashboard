@@ -2,9 +2,9 @@ import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Upload, FileJson, Check, AlertCircle } from "lucide-react";
-import { NmfSummary, SampleResult, MarkerGene } from "@/data/mockNmfData";
+import { NmfSummary, SampleResult, MarkerGene, RankMetric, SurvivalDataPoint } from "@/data/mockNmfData";
 
-interface NmfData {
+export interface NmfData {
   summary: NmfSummary;
   samples: SampleResult[];
   markerGenes: MarkerGene[];
@@ -14,6 +14,8 @@ interface NmfData {
     sampleSubtypes: string[];
     values: number[][];
   };
+  rankMetrics?: RankMetric[];
+  survivalData?: SurvivalDataPoint[];
 }
 
 interface JsonUploaderProps {
@@ -50,6 +52,12 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
     // Validate markerGenes array
     if (!Array.isArray(d.markerGenes)) return false;
     
+    // Optional: validate rankMetrics if present
+    if (d.rankMetrics && !Array.isArray(d.rankMetrics)) return false;
+    
+    // Optional: validate survivalData if present
+    if (d.survivalData && !Array.isArray(d.survivalData)) return false;
+    
     return true;
   };
 
@@ -72,7 +80,13 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
 
       onDataLoaded(data);
       setStatus("success");
-      setMessage(`Loaded ${data.summary.n_samples} samples with ${data.summary.n_subtypes} subtypes`);
+      
+      const features = [];
+      if (data.rankMetrics) features.push("rank metrics");
+      if (data.survivalData) features.push("survival data");
+      const featuresStr = features.length > 0 ? ` (includes ${features.join(", ")})` : "";
+      
+      setMessage(`Loaded ${data.summary.n_samples} samples with ${data.summary.n_subtypes} subtypes${featuresStr}`);
     } catch (err) {
       setStatus("error");
       setMessage("Failed to parse JSON file");

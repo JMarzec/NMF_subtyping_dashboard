@@ -1,16 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart } from "recharts";
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, Line } from "recharts";
+import { RankMetric, defaultRankMetrics } from "@/data/mockNmfData";
 
-const rankMetrics = [
-  { rank: 2, cophenetic: 0.912, silhouette: 0.58 },
-  { rank: 3, cophenetic: 0.954, silhouette: 0.65 },
-  { rank: 4, cophenetic: 0.987, silhouette: 0.72 },
-  { rank: 5, cophenetic: 0.965, silhouette: 0.68 },
-  { rank: 6, cophenetic: 0.923, silhouette: 0.61 },
-];
+interface CopheneticPlotProps {
+  rankMetrics?: RankMetric[];
+  optimalRank?: number;
+}
 
-export const CopheneticPlot = () => {
-  const optimalRank = 4;
+export const CopheneticPlot = ({ rankMetrics, optimalRank }: CopheneticPlotProps) => {
+  const data = rankMetrics && rankMetrics.length > 0 ? rankMetrics : defaultRankMetrics;
+  const optimal = optimalRank ?? data.reduce((max, curr) => 
+    curr.cophenetic > max.cophenetic ? curr : max, data[0]
+  ).rank;
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
@@ -20,7 +21,7 @@ export const CopheneticPlot = () => {
       <CardContent>
         <div className="h-[240px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={rankMetrics} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="copheneticGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0.3}/>
@@ -52,10 +53,10 @@ export const CopheneticPlot = () => {
                 ]}
               />
               <ReferenceLine 
-                x={optimalRank} 
+                x={optimal} 
                 stroke="hsl(142, 71%, 45%)" 
                 strokeDasharray="4 4"
-                label={{ value: "Optimal", position: "top", fontSize: 10, fill: "hsl(142, 71%, 45%)" }}
+                label={{ value: `Optimal (k=${optimal})`, position: "top", fontSize: 10, fill: "hsl(142, 71%, 45%)" }}
               />
               <Area
                 type="monotone"
