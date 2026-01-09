@@ -14,6 +14,17 @@ export interface MarkerGene {
   subtype: string;
 }
 
+export interface RankMetric {
+  rank: number;
+  cophenetic: number;
+  silhouette: number;
+}
+
+export interface SurvivalDataPoint {
+  subtype: string;
+  timePoints: { time: number; survival: number }[];
+}
+
 export interface NmfSummary {
   dataset: string;
   n_samples: number;
@@ -22,6 +33,7 @@ export interface NmfSummary {
   subtype_counts: Record<string, number>;
   cophenetic_correlation: number;
   silhouette_mean: number;
+  optimal_rank?: number;
 }
 
 export const nmfSummary: NmfSummary = {
@@ -36,8 +48,66 @@ export const nmfSummary: NmfSummary = {
     "Subtype_4": 68
   },
   cophenetic_correlation: 0.987,
-  silhouette_mean: 0.72
+  silhouette_mean: 0.72,
+  optimal_rank: 4
 };
+
+// Default rank metrics
+export const defaultRankMetrics: RankMetric[] = [
+  { rank: 2, cophenetic: 0.912, silhouette: 0.58 },
+  { rank: 3, cophenetic: 0.954, silhouette: 0.65 },
+  { rank: 4, cophenetic: 0.987, silhouette: 0.72 },
+  { rank: 5, cophenetic: 0.965, silhouette: 0.68 },
+  { rank: 6, cophenetic: 0.923, silhouette: 0.61 },
+];
+
+// Default survival data
+export const defaultSurvivalData: SurvivalDataPoint[] = [
+  {
+    subtype: "Subtype_1",
+    timePoints: [
+      { time: 0, survival: 1.0 },
+      { time: 12, survival: 0.85 },
+      { time: 24, survival: 0.72 },
+      { time: 36, survival: 0.58 },
+      { time: 48, survival: 0.45 },
+      { time: 60, survival: 0.35 },
+    ]
+  },
+  {
+    subtype: "Subtype_2",
+    timePoints: [
+      { time: 0, survival: 1.0 },
+      { time: 12, survival: 0.92 },
+      { time: 24, survival: 0.84 },
+      { time: 36, survival: 0.75 },
+      { time: 48, survival: 0.68 },
+      { time: 60, survival: 0.62 },
+    ]
+  },
+  {
+    subtype: "Subtype_3",
+    timePoints: [
+      { time: 0, survival: 1.0 },
+      { time: 12, survival: 0.78 },
+      { time: 24, survival: 0.55 },
+      { time: 36, survival: 0.38 },
+      { time: 48, survival: 0.25 },
+      { time: 60, survival: 0.18 },
+    ]
+  },
+  {
+    subtype: "Subtype_4",
+    timePoints: [
+      { time: 0, survival: 1.0 },
+      { time: 12, survival: 0.88 },
+      { time: 24, survival: 0.76 },
+      { time: 36, survival: 0.65 },
+      { time: 48, survival: 0.55 },
+      { time: 60, survival: 0.48 },
+    ]
+  },
+];
 
 // Generate realistic sample data
 export const sampleResults: SampleResult[] = Array.from({ length: 300 }, (_, i) => {
@@ -95,4 +165,24 @@ export const generateHeatmapData = () => {
       });
     }),
   };
+};
+
+// Generate dynamic colors for subtypes
+const PALETTE = [
+  "hsl(221, 83%, 53%)",
+  "hsl(262, 83%, 58%)",
+  "hsl(142, 71%, 45%)",
+  "hsl(24, 95%, 53%)",
+  "hsl(349, 89%, 60%)",
+  "hsl(47, 96%, 53%)",
+  "hsl(186, 72%, 48%)",
+  "hsl(316, 72%, 55%)",
+];
+
+export const generateSubtypeColors = (subtypes: string[]): Record<string, string> => {
+  const colors: Record<string, string> = {};
+  subtypes.forEach((subtype, idx) => {
+    colors[subtype] = PALETTE[idx % PALETTE.length];
+  });
+  return colors;
 };
