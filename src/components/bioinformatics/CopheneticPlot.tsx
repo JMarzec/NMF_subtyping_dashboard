@@ -31,19 +31,21 @@ export const CopheneticPlot = ({ rankMetrics, optimalRank }: CopheneticPlotProps
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg">NMF Rank Selection</CardTitle>
-        <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
-          <Download className="h-4 w-4 mr-1" />
-          PNG
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
-          <Download className="h-4 w-4 mr-1" />
-          SVG
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
+            <Download className="h-4 w-4 mr-1" />
+            PNG
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+            <Download className="h-4 w-4 mr-1" />
+            SVG
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div ref={chartRef} className="h-[240px] bg-card">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+            <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
               <defs>
                 <linearGradient id="copheneticGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0.3}/>

@@ -8,7 +8,6 @@ import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { generateSubtypeColors } from "@/data/mockNmfData";
 import { Dendrogram, DendrogramNode } from "./Dendrogram";
-import { downloadChartAsPNG } from "@/lib/chartExport";
 import html2canvas from "html2canvas";
 
 import { AnnotationData } from "./AnnotationUploader";
@@ -394,31 +393,50 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
   const handleDownloadPNG = async () => {
     if (!heatmapRef.current) return;
     try {
-      // Clone the element to avoid modifying the original
-      const canvas = await html2canvas(heatmapRef.current, {
+      const element = heatmapRef.current;
+      
+      // Calculate required dimensions including all content
+      const scrollWidth = element.scrollWidth;
+      const scrollHeight = element.scrollHeight;
+      
+      const canvas = await html2canvas(element, {
         backgroundColor: "#ffffff",
-        scale: 4, // Higher resolution for readability
+        scale: 4,
         logging: false,
         useCORS: true,
         allowTaint: true,
-        width: heatmapRef.current.scrollWidth + 150, // Extra padding for gene labels/dendrogram on right
-        height: heatmapRef.current.scrollHeight + 120, // Extra padding for legends at bottom
-        windowWidth: heatmapRef.current.scrollWidth + 150,
-        windowHeight: heatmapRef.current.scrollHeight + 120,
-        onclone: (clonedDoc) => {
-          // Ensure all text elements use a web-safe font for proper rendering
-          const allElements = clonedDoc.querySelectorAll('*');
+        width: scrollWidth + 200,
+        height: scrollHeight + 150,
+        windowWidth: scrollWidth + 200,
+        windowHeight: scrollHeight + 150,
+        x: 0,
+        y: 0,
+        scrollX: 0,
+        scrollY: 0,
+        onclone: (clonedDoc, clonedElement) => {
+          // Force all text to use web-safe fonts
+          const allElements = clonedElement.querySelectorAll('*');
           allElements.forEach((el) => {
             if (el instanceof HTMLElement) {
-              el.style.fontFamily = 'Arial, Helvetica, sans-serif';
-              // Ensure vertical text is rendered properly
-              if (el.style.writingMode === 'vertical-rl') {
-                el.style.letterSpacing = 'normal';
+              // Use system fonts that render reliably
+              el.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+              
+              // Fix vertical text rendering
+              if (el.style.writingMode === 'vertical-rl' || getComputedStyle(el).writingMode === 'vertical-rl') {
+                el.style.fontFamily = 'Arial, sans-serif';
+                el.style.letterSpacing = '0px';
+                el.style.fontSize = '8px';
               }
             }
           });
+          
+          // Add padding to the container
+          clonedElement.style.padding = '20px';
+          clonedElement.style.paddingRight = '180px';
+          clonedElement.style.paddingBottom = '120px';
         }
       });
+      
       const link = document.createElement("a");
       link.download = "expression-heatmap.png";
       link.href = canvas.toDataURL("image/png");
@@ -426,6 +444,156 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     } catch (error) {
       console.error("Failed to export heatmap:", error);
     }
+  };
+
+  const handleDownloadSVG = () => {
+    if (!heatmapRef.current) return;
+    
+    // Create SVG from the heatmap content
+    const svgNS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNS, "svg");
+    
+    const padding = { top: 80, right: 120, bottom: 100, left: 20 };
+    const heatmapWidthPx = cellWidth * filteredData.samples.length;
+    const heatmapHeightPx = cellHeight * filteredData.genes.length;
+    const dendrogramWidth = showDendrograms && geneDendrogram ? 50 : 0;
+    const geneLabelWidth = 100;
+    
+    const totalWidth = padding.left + heatmapWidthPx + dendrogramWidth + geneLabelWidth + padding.right;
+    const totalHeight = padding.top + heatmapHeightPx + padding.bottom;
+    
+    svg.setAttribute("width", String(totalWidth));
+    svg.setAttribute("height", String(totalHeight));
+    svg.setAttribute("xmlns", svgNS);
+    
+    // White background
+    const bg = document.createElementNS(svgNS, "rect");
+    bg.setAttribute("width", "100%");
+    bg.setAttribute("height", "100%");
+    bg.setAttribute("fill", "white");
+    svg.appendChild(bg);
+    
+    // Sample names (vertical)
+    sortedSampleIndices.forEach((idx, i) => {
+      const text = document.createElementNS(svgNS, "text");
+      text.setAttribute("x", String(padding.left + i * cellWidth + cellWidth / 2));
+      text.setAttribute("y", String(padding.top - 5));
+      text.setAttribute("font-size", "6");
+      text.setAttribute("font-family", "Arial, sans-serif");
+      text.setAttribute("fill", "#666");
+      text.setAttribute("text-anchor", "start");
+      text.setAttribute("transform", `rotate(-90, ${padding.left + i * cellWidth + cellWidth / 2}, ${padding.top - 5})`);
+      text.textContent = filteredData.samples[idx];
+      svg.appendChild(text);
+    });
+    
+    // Subtype annotation bar
+    sortedSampleIndices.forEach((idx, i) => {
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", String(padding.left + i * cellWidth));
+      rect.setAttribute("y", String(padding.top - 12));
+      rect.setAttribute("width", String(cellWidth));
+      rect.setAttribute("height", "8");
+      rect.setAttribute("fill", subtypeColors[filteredData.sampleSubtypes[idx]] || "#666");
+      svg.appendChild(rect);
+    });
+    
+    // Heatmap cells
+    sortedGeneIndices.forEach((geneIdx, gi) => {
+      sortedSampleIndices.forEach((sampleIdx, si) => {
+        const rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", String(padding.left + si * cellWidth));
+        rect.setAttribute("y", String(padding.top + gi * cellHeight));
+        rect.setAttribute("width", String(cellWidth));
+        rect.setAttribute("height", String(cellHeight));
+        rect.setAttribute("fill", getHeatmapColor(displayValues[geneIdx][sampleIdx], minVal, maxVal));
+        svg.appendChild(rect);
+      });
+    });
+    
+    // Gene labels on right
+    sortedGeneIndices.forEach((geneIdx, gi) => {
+      const text = document.createElementNS(svgNS, "text");
+      text.setAttribute("x", String(padding.left + heatmapWidthPx + dendrogramWidth + 10));
+      text.setAttribute("y", String(padding.top + gi * cellHeight + cellHeight / 2 + 3));
+      text.setAttribute("font-size", "10");
+      text.setAttribute("font-family", "Arial, sans-serif");
+      text.setAttribute("fill", "#666");
+      text.textContent = filteredData.genes[geneIdx];
+      svg.appendChild(text);
+    });
+    
+    // Color scale legend
+    const legendY = padding.top + heatmapHeightPx + 30;
+    const legendWidth = 200;
+    const legendHeight = 12;
+    const legendX = (totalWidth - legendWidth) / 2;
+    
+    // Legend gradient
+    for (let i = 0; i < 50; i++) {
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", String(legendX + i * (legendWidth / 50)));
+      rect.setAttribute("y", String(legendY));
+      rect.setAttribute("width", String(legendWidth / 50 + 1));
+      rect.setAttribute("height", String(legendHeight));
+      rect.setAttribute("fill", getHeatmapColor(i / 49, 0, 1));
+      svg.appendChild(rect);
+    }
+    
+    // Legend labels
+    const lowLabel = document.createElementNS(svgNS, "text");
+    lowLabel.setAttribute("x", String(legendX - 30));
+    lowLabel.setAttribute("y", String(legendY + legendHeight / 2 + 4));
+    lowLabel.setAttribute("font-size", "10");
+    lowLabel.setAttribute("font-family", "Arial, sans-serif");
+    lowLabel.setAttribute("fill", "#666");
+    lowLabel.textContent = useZScore ? "Low (Z)" : "Low";
+    svg.appendChild(lowLabel);
+    
+    const highLabel = document.createElementNS(svgNS, "text");
+    highLabel.setAttribute("x", String(legendX + legendWidth + 5));
+    highLabel.setAttribute("y", String(legendY + legendHeight / 2 + 4));
+    highLabel.setAttribute("font-size", "10");
+    highLabel.setAttribute("font-family", "Arial, sans-serif");
+    highLabel.setAttribute("fill", "#666");
+    highLabel.textContent = useZScore ? "High (Z)" : "High";
+    svg.appendChild(highLabel);
+    
+    // Subtype legend
+    const subtypeLegendY = legendY + 35;
+    let xOffset = padding.left;
+    uniqueSubtypes.forEach((subtype) => {
+      const rect = document.createElementNS(svgNS, "rect");
+      rect.setAttribute("x", String(xOffset));
+      rect.setAttribute("y", String(subtypeLegendY));
+      rect.setAttribute("width", "12");
+      rect.setAttribute("height", "12");
+      rect.setAttribute("rx", "2");
+      rect.setAttribute("fill", subtypeColors[subtype] || "#666");
+      svg.appendChild(rect);
+      
+      const text = document.createElementNS(svgNS, "text");
+      text.setAttribute("x", String(xOffset + 16));
+      text.setAttribute("y", String(subtypeLegendY + 10));
+      text.setAttribute("font-size", "10");
+      text.setAttribute("font-family", "Arial, sans-serif");
+      text.setAttribute("fill", "#666");
+      text.textContent = subtype;
+      svg.appendChild(text);
+      
+      xOffset += 16 + subtype.length * 6 + 20;
+    });
+    
+    // Download SVG
+    const serializer = new XMLSerializer();
+    const svgString = serializer.serializeToString(svg);
+    const blob = new Blob([svgString], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.download = "expression-heatmap.svg";
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const handleResetFilters = useCallback(() => {
@@ -468,6 +636,10 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
             <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
               <Download className="h-4 w-4 mr-1" />
               PNG
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+              <Download className="h-4 w-4 mr-1" />
+              SVG
             </Button>
             <Button variant="outline" size="sm" onClick={exportToCSV}>
               <Download className="h-4 w-4 mr-1" />
