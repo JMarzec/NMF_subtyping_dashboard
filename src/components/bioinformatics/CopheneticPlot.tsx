@@ -45,7 +45,7 @@ export const CopheneticPlot = ({ rankMetrics, optimalRank }: CopheneticPlotProps
       <CardContent>
         <div ref={chartRef} className="h-[240px] bg-card">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+            <ComposedChart data={data} margin={{ top: 32, right: 30, left: 0, bottom: 28 }}>
               <defs>
                 <linearGradient id="copheneticGradient" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0.3}/>
@@ -57,7 +57,7 @@ export const CopheneticPlot = ({ rankMetrics, optimalRank }: CopheneticPlotProps
                 tick={{ fontSize: 12 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
-                label={{ value: "Factorization Rank (k)", position: "bottom", offset: -5, fontSize: 11 }}
+                label={{ value: "Factorization Rank (k)", position: "bottom", offset: 10, fontSize: 11 }}
               />
               <YAxis 
                 domain={[0.5, 1]}
@@ -80,7 +80,7 @@ export const CopheneticPlot = ({ rankMetrics, optimalRank }: CopheneticPlotProps
                 x={optimal} 
                 stroke="hsl(142, 71%, 45%)" 
                 strokeDasharray="4 4"
-                label={{ value: `Optimal (k=${optimal})`, position: "top", fontSize: 10, fill: "hsl(142, 71%, 45%)" }}
+                label={{ value: `Optimal (k=${optimal})`, position: "top", fontSize: 10, fill: "hsl(142, 71%, 45%)", offset: 14 }}
               />
               <Area
                 type="monotone"
