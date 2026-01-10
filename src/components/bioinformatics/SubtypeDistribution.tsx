@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { useRef } from "react";
 import { Download } from "lucide-react";
-import { downloadChartAsPNG } from "@/lib/chartExport";
+import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 
 interface SubtypeDistributionProps {
   subtypeCounts: Record<string, number>;
@@ -13,8 +13,12 @@ interface SubtypeDistributionProps {
 export const SubtypeDistribution = ({ subtypeCounts, subtypeColors }: SubtypeDistributionProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
 
-  const handleDownload = () => {
+  const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "subtype-distribution");
+  };
+
+  const handleDownloadSVG = () => {
+    downloadRechartsAsSVG(chartRef.current, "subtype-distribution");
   };
 
   const data = Object.entries(subtypeCounts).map(([key, value]) => ({
@@ -29,9 +33,13 @@ export const SubtypeDistribution = ({ subtypeCounts, subtypeColors }: SubtypeDis
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg">Subtype Distribution</CardTitle>
-        <Button variant="outline" size="sm" onClick={handleDownload}>
+        <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
           <Download className="h-4 w-4 mr-1" />
           PNG
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+          <Download className="h-4 w-4 mr-1" />
+          SVG
         </Button>
       </CardHeader>
       <CardContent>

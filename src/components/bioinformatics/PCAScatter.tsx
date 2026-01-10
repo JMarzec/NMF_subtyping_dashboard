@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SampleResult, generateSubtypeColors } from "@/data/mockNmfData";
 import { useMemo, useState, useRef } from "react";
-import { Download } from "lucide-react";
+import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
-import { downloadChartAsPNG } from "@/lib/chartExport";
+import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
@@ -417,8 +417,17 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
     return subtypeColors[entry.subtype] || "hsl(var(--primary))";
   };
 
-  const handleDownload = () => {
+  const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "pca-plot");
+  };
+
+  const handleDownloadSVG = () => {
+    downloadRechartsAsSVG(chartRef.current, "pca-plot");
+  };
+
+  const handleResetFilters = () => {
+    setExcludedSubtypes(new Set());
+    setExcludedAnnotationValues(new Set());
   };
 
   // Reset excluded values when changing annotation
@@ -470,10 +479,20 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
               label="Color by"
             />
           )}
-          <Button variant="outline" size="sm" onClick={handleDownload}>
+          <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
             <Download className="h-4 w-4 mr-1" />
             PNG
           </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+            <Download className="h-4 w-4 mr-1" />
+            SVG
+          </Button>
+          {isFiltered && (
+            <Button variant="outline" size="sm" onClick={handleResetFilters}>
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Reset
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent>

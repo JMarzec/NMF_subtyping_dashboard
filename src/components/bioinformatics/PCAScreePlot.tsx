@@ -1,9 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Line, ComposedChart, ReferenceLine } from "recharts";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Download } from "lucide-react";
-import { downloadChartAsPNG } from "@/lib/chartExport";
+import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
+import { SampleResult } from "@/data/mockNmfData";
 
 interface HeatmapData {
   genes: string[];
@@ -12,8 +15,11 @@ interface HeatmapData {
   values: number[][];
 }
 
+type PCADataSource = "expression" | "nmf";
+
 interface PCAScreePlotProps {
   heatmapData: HeatmapData;
+  samples: SampleResult[];
 }
 
 // Compute all principal components variance using SVD-like approach on gene expression data
@@ -172,26 +178,125 @@ const computeAllPCAVariance = (values: number[][], nGenes: number, nSamples: num
   return { variances, cumulative };
 };
 
-export const PCAScreePlot = ({ heatmapData }: PCAScreePlotProps) => {
+// Compute variance from NMF scores
+const computeNMFVariance = (samples: SampleResult[]): { variances: number[]; cumulative: number[] } => {
+  if (samples.length === 0) return { variances: [], cumulative: [] };
+
+  const scoreKeys = Object.keys(samples[0]).filter(k => k.startsWith("score_")).sort();
+  const numScores = scoreKeys.length;
+  if (numScores === 0) return { variances: [], cumulative: [] };
+
+  const data = samples.map(s => scoreKeys.map(k => (s as any)[k] as number));
+  const n = data.length;
+
+  // Center the data
+  const means = Array(numScores).fill(0);
+  for (const row of data) {
+    for (let j = 0; j < numScores; j++) {
+      means[j] += row[j];
+    }
+  }
+  for (let j = 0; j < numScores; j++) {
+    means[j] /= n;
+  }
+  const centered = data.map(row => row.map((v, j) => v - means[j]));
+
+  // Compute covariance
+  const cov: number[][] = Array(numScores).fill(null).map(() => Array(numScores).fill(0));
+  for (let i = 0; i < numScores; i++) {
+    for (let j = i; j < numScores; j++) {
+      let sum = 0;
+      for (const row of centered) {
+        sum += row[i] * row[j];
+      }
+      cov[i][j] = sum / (n - 1);
+      cov[j][i] = cov[i][j];
+    }
+  }
+
+  let totalVariance = 0;
+  for (let i = 0; i < numScores; i++) totalVariance += cov[i][i];
+
+  // Power iteration to get eigenvalues
+  let currentCov = cov.map(row => [...row]);
+  const eigenvalues: number[] = [];
+
+  for (let pc = 0; pc < numScores; pc++) {
+    let vector = Array(numScores).fill(0).map(() => Math.random());
+    let norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
+    vector = vector.map(v => v / norm);
+
+    let eigenvalue = 0;
+    for (let iter = 0; iter < 100; iter++) {
+      const newVector = Array(numScores).fill(0);
+      for (let i = 0; i < numScores; i++) {
+        for (let j = 0; j < numScores; j++) {
+          newVector[i] += currentCov[i][j] * vector[j];
+        }
+      }
+      eigenvalue = newVector.reduce((sum, v, i) => sum + v * vector[i], 0);
+      norm = Math.sqrt(newVector.reduce((sum, v) => sum + v * v, 0));
+      if (norm < 1e-10) break;
+      vector = newVector.map(v => v / norm);
+    }
+
+    if (eigenvalue > 1e-6) {
+      eigenvalues.push(eigenvalue);
+      currentCov = currentCov.map((row, i) =>
+        row.map((v, j) => v - eigenvalue * vector[i] * vector[j])
+      );
+    } else {
+      break;
+    }
+  }
+
+  const variances = eigenvalues.map(e => totalVariance > 0 ? (e / totalVariance) * 100 : 0);
+  const cumulative: number[] = [];
+  let sum = 0;
+  for (const v of variances) {
+    sum += v;
+    cumulative.push(Math.min(sum, 100));
+  }
+
+  return { variances, cumulative };
+};
+
+export const PCAScreePlot = ({ heatmapData, samples }: PCAScreePlotProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
+  const [dataSource, setDataSource] = useState<PCADataSource>("expression");
 
   const chartData = useMemo(() => {
-    const { variances, cumulative } = computeAllPCAVariance(
-      heatmapData.values, 
-      heatmapData.genes.length, 
-      heatmapData.samples.length
-    );
+    if (dataSource === "expression") {
+      const { variances, cumulative } = computeAllPCAVariance(
+        heatmapData.values, 
+        heatmapData.genes.length, 
+        heatmapData.samples.length
+      );
 
-    return variances.map((variance, idx) => ({
-      pc: `PC${idx + 1}`,
-      pcNum: idx + 1,
-      variance: variance,
-      cumulative: cumulative[idx],
-    }));
-  }, [heatmapData]);
+      return variances.map((variance, idx) => ({
+        pc: `PC${idx + 1}`,
+        pcNum: idx + 1,
+        variance: variance,
+        cumulative: cumulative[idx],
+      }));
+    } else {
+      const { variances, cumulative } = computeNMFVariance(samples);
 
-  const handleDownload = () => {
+      return variances.map((variance, idx) => ({
+        pc: `PC${idx + 1}`,
+        pcNum: idx + 1,
+        variance: variance,
+        cumulative: cumulative[idx],
+      }));
+    }
+  }, [heatmapData, samples, dataSource]);
+
+  const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "pca-scree-plot");
+  };
+
+  const handleDownloadSVG = () => {
+    downloadRechartsAsSVG(chartRef.current, "pca-scree-plot");
   };
 
   // Find PC where cumulative reaches 80%
@@ -199,12 +304,27 @@ export const PCAScreePlot = ({ heatmapData }: PCAScreePlotProps) => {
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
         <CardTitle className="text-lg">PCA Scree Plot ({chartData.length} components)</CardTitle>
-        <Button variant="outline" size="sm" onClick={handleDownload}>
-          <Download className="h-4 w-4 mr-1" />
-          PNG
-        </Button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground">NMF</Label>
+            <Switch
+              checked={dataSource === "expression"}
+              onCheckedChange={(checked) => setDataSource(checked ? "expression" : "nmf")}
+              className="scale-75"
+            />
+            <Label className="text-xs text-muted-foreground">Expr</Label>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
+            <Download className="h-4 w-4 mr-1" />
+            PNG
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+            <Download className="h-4 w-4 mr-1" />
+            SVG
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div ref={chartRef} className="h-[200px] bg-card">
@@ -266,8 +386,8 @@ export const PCAScreePlot = ({ heatmapData }: PCAScreePlotProps) => {
           </ResponsiveContainer>
         </div>
         <p className="text-xs text-center text-muted-foreground mt-2">
-          {pc80 >= 0 
-            ? `80% variance explained by first ${pc80 + 1} components (dashed line)`
+          {dataSource === "expression" ? "Gene Expression" : "NMF Scores"} - {pc80 >= 0 
+            ? `80% variance explained by first ${pc80 + 1} components`
             : "Dashed line indicates 80% cumulative variance threshold"}
         </p>
       </CardContent>

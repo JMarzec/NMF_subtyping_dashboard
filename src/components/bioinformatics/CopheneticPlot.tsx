@@ -4,7 +4,7 @@ import { XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, Compos
 import { RankMetric, defaultRankMetrics } from "@/data/mockNmfData";
 import { useRef } from "react";
 import { Download } from "lucide-react";
-import { downloadChartAsPNG } from "@/lib/chartExport";
+import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 
 interface CopheneticPlotProps {
   rankMetrics?: RankMetric[];
@@ -14,8 +14,12 @@ interface CopheneticPlotProps {
 export const CopheneticPlot = ({ rankMetrics, optimalRank }: CopheneticPlotProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
 
-  const handleDownload = () => {
+  const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "nmf-rank-selection");
+  };
+
+  const handleDownloadSVG = () => {
+    downloadRechartsAsSVG(chartRef.current, "nmf-rank-selection");
   };
 
   const data = rankMetrics && rankMetrics.length > 0 ? rankMetrics : defaultRankMetrics;
@@ -27,9 +31,13 @@ export const CopheneticPlot = ({ rankMetrics, optimalRank }: CopheneticPlotProps
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg">NMF Rank Selection</CardTitle>
-        <Button variant="outline" size="sm" onClick={handleDownload}>
+        <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
           <Download className="h-4 w-4 mr-1" />
           PNG
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+          <Download className="h-4 w-4 mr-1" />
+          SVG
         </Button>
       </CardHeader>
       <CardContent>

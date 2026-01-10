@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SampleResult, generateSubtypeColors } from "@/data/mockNmfData";
 import { useMemo, useState, useRef } from "react";
-import { Download } from "lucide-react";
+import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
-import { downloadChartAsPNG } from "@/lib/chartExport";
+import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 
 interface ClusterScatterProps {
   samples: SampleResult[];
@@ -113,8 +113,17 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations }: Clus
     return subtypeColors[entry.subtype] || "hsl(var(--primary))";
   };
 
-  const handleDownload = () => {
+  const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "umap-plot");
+  };
+
+  const handleDownloadSVG = () => {
+    downloadRechartsAsSVG(chartRef.current, "umap-plot");
+  };
+
+  const handleResetFilters = () => {
+    setExcludedSubtypes(new Set());
+    setExcludedAnnotationValues(new Set());
   };
 
   // Reset excluded values when changing annotation
@@ -157,10 +166,20 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations }: Clus
               label="Color by"
             />
           )}
-          <Button variant="outline" size="sm" onClick={handleDownload}>
+          <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
             <Download className="h-4 w-4 mr-1" />
             PNG
           </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+            <Download className="h-4 w-4 mr-1" />
+            SVG
+          </Button>
+          {isFiltered && (
+            <Button variant="outline" size="sm" onClick={handleResetFilters}>
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Reset
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent>

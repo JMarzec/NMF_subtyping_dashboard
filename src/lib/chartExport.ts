@@ -26,10 +26,22 @@ export const downloadChartAsPNG = async (
       backgroundColor,
       scale,
       logging: false,
+      useCORS: true,
+      allowTaint: true,
       width: element.scrollWidth + paddingRight,
       height: element.scrollHeight + paddingBottom,
       windowWidth: element.scrollWidth + paddingRight,
       windowHeight: element.scrollHeight + paddingBottom,
+      onclone: (clonedDoc) => {
+        // Ensure all text elements render properly
+        const clonedElement = clonedDoc.body.querySelector('[data-heatmap-container]') || clonedDoc.body;
+        const textElements = clonedElement.querySelectorAll('*');
+        textElements.forEach((el) => {
+          if (el instanceof HTMLElement) {
+            el.style.fontFamily = 'system-ui, -apple-system, sans-serif';
+          }
+        });
+      }
     });
 
     const link = document.createElement("a");
@@ -58,4 +70,30 @@ export const downloadSVGAsFile = (
   link.click();
 
   URL.revokeObjectURL(url);
+};
+
+// Export Recharts chart to SVG
+export const downloadRechartsAsSVG = (
+  containerElement: HTMLElement | null,
+  filename: string
+): void => {
+  if (!containerElement) return;
+
+  const svgElement = containerElement.querySelector('svg');
+  if (!svgElement) {
+    console.error("No SVG element found in container");
+    return;
+  }
+
+  // Clone the SVG to modify it
+  const clonedSvg = svgElement.cloneNode(true) as SVGElement;
+  
+  // Add white background
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('width', '100%');
+  rect.setAttribute('height', '100%');
+  rect.setAttribute('fill', 'white');
+  clonedSvg.insertBefore(rect, clonedSvg.firstChild);
+
+  downloadSVGAsFile(clonedSvg, filename);
 };

@@ -1,12 +1,17 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { NmfSummary } from "@/data/mockNmfData";
-import { Database, Dna, Users, TrendingUp } from "lucide-react";
+import { Database, Dna, Users, TrendingUp, Download } from "lucide-react";
+import { useRef } from "react";
+import { downloadChartAsPNG } from "@/lib/chartExport";
 
 interface SummaryCardsProps {
   summary: NmfSummary;
 }
 
 export const SummaryCards = ({ summary }: SummaryCardsProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const cards = [
     {
       title: "Dataset",
@@ -38,25 +43,40 @@ export const SummaryCards = ({ summary }: SummaryCardsProps) => {
     },
   ];
 
+  const handleDownloadPNG = () => {
+    downloadChartAsPNG(containerRef.current, "summary-cards", {
+      paddingRight: 20,
+      paddingBottom: 20,
+    });
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-      {cards.map((card) => (
-        <Card key={card.title} className="relative overflow-hidden border-0 bg-card/50 backdrop-blur-sm">
-          <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-5`} />
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {card.title}
-            </CardTitle>
-            <div className={`p-2 rounded-lg bg-gradient-to-br ${card.gradient}`}>
-              <card.icon className="h-4 w-4 text-white" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{card.value}</div>
-            <p className="text-xs text-muted-foreground mt-1">{card.subtitle}</p>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
+          <Download className="h-4 w-4 mr-1" />
+          PNG
+        </Button>
+      </div>
+      <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-background p-2 rounded-lg">
+        {cards.map((card) => (
+          <Card key={card.title} className="relative overflow-hidden border-0 bg-card/50 backdrop-blur-sm">
+            <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-5`} />
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {card.title}
+              </CardTitle>
+              <div className={`p-2 rounded-lg bg-gradient-to-br ${card.gradient}`}>
+                <card.icon className="h-4 w-4 text-white" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{card.value}</div>
+              <p className="text-xs text-muted-foreground mt-1">{card.subtitle}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 };

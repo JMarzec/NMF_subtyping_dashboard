@@ -99,7 +99,7 @@ const Index = () => {
               userAnnotations={userAnnotations}
               heatmapData={heatmapData}
             />
-            <PCAScreePlot heatmapData={heatmapData} />
+            <PCAScreePlot heatmapData={heatmapData} samples={data.samples} />
           </div>
         </div>
 

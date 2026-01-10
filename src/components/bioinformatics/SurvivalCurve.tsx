@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useMemo, useRef } from "react";
 import { Download } from "lucide-react";
-import { downloadChartAsPNG } from "@/lib/chartExport";
+import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 
 export interface SurvivalData {
   subtype: string;
@@ -18,8 +18,12 @@ interface SurvivalCurveProps {
 export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
 
-  const handleDownload = () => {
+  const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "survival-curve");
+  };
+
+  const handleDownloadSVG = () => {
+    downloadRechartsAsSVG(chartRef.current, "survival-curve");
   };
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
@@ -63,9 +67,13 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg">Kaplan-Meier Survival Curves</CardTitle>
-        <Button variant="outline" size="sm" onClick={handleDownload}>
+        <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
           <Download className="h-4 w-4 mr-1" />
           PNG
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+          <Download className="h-4 w-4 mr-1" />
+          SVG
         </Button>
       </CardHeader>
       <CardContent>

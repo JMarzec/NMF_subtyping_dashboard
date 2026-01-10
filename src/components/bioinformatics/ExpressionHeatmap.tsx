@@ -4,7 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMemo, useState, useRef, useCallback } from "react";
-import { Download } from "lucide-react";
+import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { generateSubtypeColors } from "@/data/mockNmfData";
 import { Dendrogram, DendrogramNode } from "./Dendrogram";
@@ -394,14 +394,30 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
   const handleDownloadPNG = async () => {
     if (!heatmapRef.current) return;
     try {
+      // Clone the element to avoid modifying the original
       const canvas = await html2canvas(heatmapRef.current, {
         backgroundColor: "#ffffff",
         scale: 4, // Higher resolution for readability
         logging: false,
-        width: heatmapRef.current.scrollWidth + 120, // Extra padding for gene labels/dendrogram on right
-        height: heatmapRef.current.scrollHeight + 80, // Extra padding for legends at bottom
-        windowWidth: heatmapRef.current.scrollWidth + 120,
-        windowHeight: heatmapRef.current.scrollHeight + 80,
+        useCORS: true,
+        allowTaint: true,
+        width: heatmapRef.current.scrollWidth + 150, // Extra padding for gene labels/dendrogram on right
+        height: heatmapRef.current.scrollHeight + 120, // Extra padding for legends at bottom
+        windowWidth: heatmapRef.current.scrollWidth + 150,
+        windowHeight: heatmapRef.current.scrollHeight + 120,
+        onclone: (clonedDoc) => {
+          // Ensure all text elements use a web-safe font for proper rendering
+          const allElements = clonedDoc.querySelectorAll('*');
+          allElements.forEach((el) => {
+            if (el instanceof HTMLElement) {
+              el.style.fontFamily = 'Arial, Helvetica, sans-serif';
+              // Ensure vertical text is rendered properly
+              if (el.style.writingMode === 'vertical-rl') {
+                el.style.letterSpacing = 'normal';
+              }
+            }
+          });
+        }
       });
       const link = document.createElement("a");
       link.download = "expression-heatmap.png";
@@ -411,6 +427,11 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
       console.error("Failed to export heatmap:", error);
     }
   };
+
+  const handleResetFilters = useCallback(() => {
+    setExcludedSubtypes(new Set());
+    setExcludedAnnotationValues(new Set());
+  }, []);
 
   const heatmapWidth = cellWidth * filteredData.samples.length;
 
@@ -452,6 +473,12 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
               <Download className="h-4 w-4 mr-1" />
               CSV
             </Button>
+            {(excludedSubtypes.size > 0 || excludedAnnotationValues.size > 0) && (
+              <Button variant="outline" size="sm" onClick={handleResetFilters}>
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Reset
+              </Button>
+            )}
           </div>
         </div>
         
