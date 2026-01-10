@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SampleResult, generateSubtypeColors } from "@/data/mockNmfData";
-import { useMemo, useState, useRef } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
@@ -24,6 +24,7 @@ interface PCAScatterProps {
   subtypeColors: Record<string, string>;
   userAnnotations?: AnnotationData;
   heatmapData: HeatmapData;
+  filterResetKey?: number;
 }
 
 // PCA on NMF scores
@@ -269,12 +270,20 @@ const computePCAFromExpression = (values: number[][], nGenes: number, nSamples: 
   return { pc1: pc1Scores, pc2: pc2Scores, variance1, variance2 };
 };
 
-export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapData }: PCAScatterProps) => {
+export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapData, filterResetKey }: PCAScatterProps) => {
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
   const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
   const [dataSource, setDataSource] = useState<PCADataSource>("expression");
   const chartRef = useRef<HTMLDivElement>(null);
+
+  // Reset filters when global reset key changes
+  useEffect(() => {
+    if (filterResetKey !== undefined && filterResetKey > 0) {
+      setExcludedSubtypes(new Set());
+      setExcludedAnnotationValues(new Set());
+    }
+  }, [filterResetKey]);
 
   // Generate colors for user annotation values
   const userAnnotationColors = useMemo(() => {

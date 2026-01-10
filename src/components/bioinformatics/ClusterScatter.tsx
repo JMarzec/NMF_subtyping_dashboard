@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SampleResult, generateSubtypeColors } from "@/data/mockNmfData";
-import { useMemo, useState, useRef } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
@@ -12,13 +12,22 @@ interface ClusterScatterProps {
   samples: SampleResult[];
   subtypeColors: Record<string, string>;
   userAnnotations?: AnnotationData;
+  filterResetKey?: number;
 }
 
-export const ClusterScatter = ({ samples, subtypeColors, userAnnotations }: ClusterScatterProps) => {
+export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filterResetKey }: ClusterScatterProps) => {
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
   const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
   const chartRef = useRef<HTMLDivElement>(null);
+
+  // Reset filters when global reset key changes
+  useEffect(() => {
+    if (filterResetKey !== undefined && filterResetKey > 0) {
+      setExcludedSubtypes(new Set());
+      setExcludedAnnotationValues(new Set());
+    }
+  }, [filterResetKey]);
 
   // Generate colors for user annotation values
   const userAnnotationColors = useMemo(() => {

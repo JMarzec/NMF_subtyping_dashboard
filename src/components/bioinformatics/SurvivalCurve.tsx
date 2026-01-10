@@ -67,25 +67,27 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg">Kaplan-Meier Survival Curves</CardTitle>
-        <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
-          <Download className="h-4 w-4 mr-1" />
-          PNG
-        </Button>
-        <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
-          <Download className="h-4 w-4 mr-1" />
-          SVG
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
+            <Download className="h-4 w-4 mr-1" />
+            PNG
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDownloadSVG}>
+            <Download className="h-4 w-4 mr-1" />
+            SVG
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div ref={chartRef} className="h-[280px] bg-card">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
+            <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
               <XAxis
                 dataKey="time"
                 tick={{ fontSize: 11 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
-                label={{ value: "Time (months)", position: "bottom", offset: 0, fontSize: 11 }}
+                label={{ value: "Time (months)", position: "bottom", offset: 15, fontSize: 11 }}
               />
               <YAxis
                 domain={[0, 1]}
@@ -109,7 +111,7 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
                 labelFormatter={(time) => `Time: ${time} months`}
               />
               <Legend 
-                wrapperStyle={{ fontSize: "12px" }}
+                wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }}
                 iconType="line"
               />
               {subtypes.map((subtype) => (
