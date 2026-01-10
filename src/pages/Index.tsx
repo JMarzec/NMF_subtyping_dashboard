@@ -3,6 +3,8 @@ import { SummaryCards } from "@/components/bioinformatics/SummaryCards";
 import { SubtypeDistribution } from "@/components/bioinformatics/SubtypeDistribution";
 import { ClusterScatter } from "@/components/bioinformatics/ClusterScatter";
 import { PCAScatter } from "@/components/bioinformatics/PCAScatter";
+import { PCAScreePlot } from "@/components/bioinformatics/PCAScreePlot";
+import { ClusteringMetrics } from "@/components/bioinformatics/ClusteringMetrics";
 import { ExpressionHeatmap } from "@/components/bioinformatics/ExpressionHeatmap";
 import { MarkerGenesTable } from "@/components/bioinformatics/MarkerGenesTable";
 import { CopheneticPlot } from "@/components/bioinformatics/CopheneticPlot";
@@ -106,15 +108,23 @@ const Index = () => {
               userAnnotations={userAnnotations}
             />
           </div>
-          <CopheneticPlot 
-            rankMetrics={data.rankMetrics} 
-            optimalRank={data.summary.optimal_rank} 
-          />
+          <div className="space-y-6">
+            <CopheneticPlot 
+              rankMetrics={data.rankMetrics} 
+              optimalRank={data.summary.optimal_rank} 
+            />
+            <ClusteringMetrics samples={data.samples} />
+          </div>
         </div>
 
-        {/* Survival Analysis */}
+        {/* PCA Analysis Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <PCAScreePlot samples={data.samples} />
           <SurvivalCurve data={data.survivalData || []} subtypeColors={subtypeColors} />
+        </div>
+
+        {/* Marker Genes */}
+        <div className="grid grid-cols-1 gap-6">
           <MarkerGenesTable genes={data.markerGenes} subtypeColors={subtypeColors} />
         </div>
       </main>

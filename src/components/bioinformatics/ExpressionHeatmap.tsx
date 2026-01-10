@@ -225,10 +225,10 @@ const transpose = (matrix: number[][]): number[][] => {
 export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: ExpressionHeatmapProps) => {
   const [hoveredCell, setHoveredCell] = useState<{ gene: string; sample: string; value: number; subtype: string; userAnnotation?: string } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
-  const [useZScore, setUseZScore] = useState(true);
+  const [useZScore, setUseZScore] = useState(false);
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
-  const [sampleClusterMethod, setSampleClusterMethod] = useState<ClusteringMethod>("none");
-  const [geneClusterMethod, setGeneClusterMethod] = useState<ClusteringMethod>("none");
+  const [sampleClusterMethod, setSampleClusterMethod] = useState<ClusteringMethod>("ward");
+  const [geneClusterMethod, setGeneClusterMethod] = useState<ClusteringMethod>("ward");
   const [distanceMetric, setDistanceMetric] = useState<DistanceMetric>("euclidean");
   const [showDendrograms, setShowDendrograms] = useState(true);
 
@@ -422,8 +422,8 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
           {/* Sample dendrogram (horizontal, above heatmap) */}
           {showDendrograms && sampleDendrogram && sampleClusterMethod !== "none" && (
             <div className="flex mb-1">
-              <div style={{ width: 72 + 8 }} /> {/* Spacer for gene labels */}
-              {geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 40 }} />} {/* Spacer for gene dendrogram */}
+              <div style={{ width: 80 }} /> {/* Spacer for gene labels (72 + 8 margin) */}
+              {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 44 }} />} {/* Spacer for gene dendrogram (40 + 4 margin) */}
               <Dendrogram
                 root={sampleDendrogram}
                 width={cellWidth * data.samples.length}
@@ -437,10 +437,10 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
           {/* User annotation bar (if selected) */}
           {selectedAnnotation && userAnnotations && (
             <div className="flex mb-0.5">
-              <div className="mr-2 text-[8px] text-muted-foreground text-right truncate pr-1" style={{ width: 72 }}>
+              <div className="text-[8px] text-muted-foreground text-right truncate pr-2" style={{ width: 80 }}>
                 {selectedAnnotation}
               </div>
-              {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 40 }} />}
+              {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 44 }} />}
               <div className="flex">
                 {sortedSampleIndices.map((idx, i) => {
                   const sampleId = data.samples[idx];
@@ -463,10 +463,10 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
           
           {/* Subtype annotation bar */}
           <div className="flex mb-1">
-            <div className="mr-2 text-[8px] text-muted-foreground text-right truncate pr-1" style={{ width: 72 }}>
+            <div className="text-[8px] text-muted-foreground text-right truncate pr-2" style={{ width: 80 }}>
               NMF Subtype
             </div>
-            {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 40 }} />}
+            {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 44 }} />}
             <div className="flex">
               {sortedSampleIndices.map((idx, i) => (
                 <div
@@ -485,11 +485,11 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
           {/* Heatmap grid with gene dendrogram */}
           <div className="flex">
             {/* Gene labels */}
-            <div className="flex flex-col mr-2" style={{ width: 72 }}>
+            <div className="flex flex-col pr-2" style={{ width: 80 }}>
               {sortedGeneIndices.map((geneIdx) => (
                 <div
                   key={geneIdx}
-                  className="text-xs text-right pr-1 truncate text-muted-foreground"
+                  className="text-xs text-right truncate text-muted-foreground"
                   style={{ height: cellHeight, lineHeight: `${cellHeight}px` }}
                 >
                   {data.genes[geneIdx]}
@@ -499,7 +499,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
 
             {/* Gene dendrogram (vertical, left of heatmap) */}
             {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && (
-              <div className="mr-1">
+              <div className="mr-1" style={{ width: 40 }}>
                 <Dendrogram
                   root={geneDendrogram}
                   width={40}

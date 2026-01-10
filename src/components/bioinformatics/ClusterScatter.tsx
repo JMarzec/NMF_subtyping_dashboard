@@ -1,9 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SampleResult, generateSubtypeColors } from "@/data/mockNmfData";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
+import { Download } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
+import { downloadChartAsPNG } from "@/lib/chartExport";
 
 interface ClusterScatterProps {
   samples: SampleResult[];
@@ -13,6 +16,7 @@ interface ClusterScatterProps {
 
 export const ClusterScatter = ({ samples, subtypeColors, userAnnotations }: ClusterScatterProps) => {
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
 
   // Generate colors for user annotation values
   const userAnnotationColors = useMemo(() => {
@@ -65,6 +69,10 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations }: Clus
     return subtypeColors[entry.subtype] || "hsl(var(--primary))";
   };
 
+  const handleDownload = () => {
+    downloadChartAsPNG(chartRef.current, "umap-plot");
+  };
+
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length > 0) {
       const data = payload[0].payload;
@@ -88,17 +96,23 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations }: Clus
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
         <CardTitle className="text-lg">Sample Clustering (UMAP-style)</CardTitle>
-        {userAnnotations && userAnnotations.columns.length > 0 && (
-          <AnnotationSelector
-            columns={userAnnotations.columns}
-            selectedColumn={selectedAnnotation}
-            onColumnChange={setSelectedAnnotation}
-            label="Color by"
-          />
-        )}
+        <div className="flex items-center gap-2">
+          {userAnnotations && userAnnotations.columns.length > 0 && (
+            <AnnotationSelector
+              columns={userAnnotations.columns}
+              selectedColumn={selectedAnnotation}
+              onColumnChange={setSelectedAnnotation}
+              label="Color by"
+            />
+          )}
+          <Button variant="outline" size="sm" onClick={handleDownload}>
+            <Download className="h-4 w-4 mr-1" />
+            PNG
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="h-[280px]">
+        <div ref={chartRef} className="h-[280px] bg-card">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
               <XAxis

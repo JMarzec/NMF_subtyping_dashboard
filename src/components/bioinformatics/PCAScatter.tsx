@@ -1,9 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { SampleResult, generateSubtypeColors } from "@/data/mockNmfData";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
+import { Download } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
+import { downloadChartAsPNG } from "@/lib/chartExport";
 
 interface PCAScatterProps {
   samples: SampleResult[];
@@ -107,6 +110,8 @@ const computePCA = (data: number[][]): { pc1: number[]; pc2: number[]; variance1
 
 export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatterProps) => {
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
+  const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
+  const chartRef = useRef<HTMLDivElement>(null);
 
   // Generate colors for user annotation values
   const userAnnotationColors = useMemo(() => {
@@ -118,12 +123,17 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
     return generateSubtypeColors([...values].sort());
   }, [selectedAnnotation, userAnnotations]);
 
+  // Filter samples based on excluded subtypes
+  const filteredSamples = useMemo(() => {
+    return samples.filter(s => !excludedSubtypes.has(s.subtype));
+  }, [samples, excludedSubtypes]);
+
   // Compute PCA from sample scores
   const { scatterData, uniqueSubtypes, uniqueAnnotationValues, variancePC1, variancePC2 } = useMemo(() => {
     const subtypes = [...new Set(samples.map(s => s.subtype))].sort();
 
-    // Extract score matrix from samples (all score_subtype_* columns)
-    const scoreMatrix = samples.map(sample => {
+    // Extract score matrix from filtered samples
+    const scoreMatrix = filteredSamples.map(sample => {
       const scores: number[] = [];
       Object.entries(sample).forEach(([key, value]) => {
         if (key.startsWith("score_") && typeof value === "number") {
@@ -136,7 +146,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
     // Compute PCA
     const { pc1, pc2, variance1, variance2 } = computePCA(scoreMatrix);
 
-    const data = samples.map((sample, idx) => {
+    const data = filteredSamples.map((sample, idx) => {
       const userAnnotValue = selectedAnnotation && userAnnotations?.annotations[sample.sample_id]
         ? userAnnotations.annotations[sample.sample_id][selectedAnnotation]
         : undefined;
@@ -162,13 +172,29 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
       variancePC1: variance1,
       variancePC2: variance2
     };
-  }, [samples, selectedAnnotation, userAnnotations]);
+  }, [filteredSamples, selectedAnnotation, userAnnotations, samples]);
+
+  const toggleSubtype = (subtype: string) => {
+    setExcludedSubtypes(prev => {
+      const next = new Set(prev);
+      if (next.has(subtype)) {
+        next.delete(subtype);
+      } else {
+        next.add(subtype);
+      }
+      return next;
+    });
+  };
 
   const getPointColor = (entry: typeof scatterData[0]) => {
     if (selectedAnnotation && entry.userAnnotation) {
       return userAnnotationColors[entry.userAnnotation] || "hsl(var(--muted))";
     }
     return subtypeColors[entry.subtype] || "hsl(var(--primary))";
+  };
+
+  const handleDownload = () => {
+    downloadChartAsPNG(chartRef.current, "pca-plot");
   };
 
   const CustomTooltip = ({ active, payload }: any) => {
@@ -194,17 +220,23 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
         <CardTitle className="text-lg">Sample Clustering (PCA)</CardTitle>
-        {userAnnotations && userAnnotations.columns.length > 0 && (
-          <AnnotationSelector
-            columns={userAnnotations.columns}
-            selectedColumn={selectedAnnotation}
-            onColumnChange={setSelectedAnnotation}
-            label="Color by"
-          />
-        )}
+        <div className="flex items-center gap-2">
+          {userAnnotations && userAnnotations.columns.length > 0 && (
+            <AnnotationSelector
+              columns={userAnnotations.columns}
+              selectedColumn={selectedAnnotation}
+              onColumnChange={setSelectedAnnotation}
+              label="Color by"
+            />
+          )}
+          <Button variant="outline" size="sm" onClick={handleDownload}>
+            <Download className="h-4 w-4 mr-1" />
+            PNG
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="h-[280px]">
+        <div ref={chartRef} className="h-[280px] bg-card">
           <ResponsiveContainer width="100%" height="100%">
             <ScatterChart margin={{ top: 10, right: 10, bottom: 30, left: 20 }}>
               <XAxis
@@ -253,7 +285,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
           </ResponsiveContainer>
         </div>
 
-        {/* Legend */}
+        {/* Legend with clickable items */}
         <div className="flex flex-wrap gap-4 mt-4 justify-center">
           {selectedAnnotation && uniqueAnnotationValues.length > 0 ? (
             <>
@@ -270,19 +302,31 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
             </>
           ) : (
             <>
-              <span className="text-xs text-muted-foreground font-medium">NMF Subtypes:</span>
+              <span className="text-xs text-muted-foreground font-medium">NMF Subtypes (click to exclude):</span>
               {uniqueSubtypes.map((subtype) => (
-                <div key={subtype} className="flex items-center gap-2">
+                <button
+                  key={subtype}
+                  className={`flex items-center gap-2 px-2 py-0.5 rounded transition-all ${
+                    excludedSubtypes.has(subtype) ? "opacity-40 line-through" : "hover:bg-muted/50"
+                  }`}
+                  onClick={() => toggleSubtype(subtype)}
+                  title={excludedSubtypes.has(subtype) ? `Click to include ${subtype}` : `Click to exclude ${subtype}`}
+                >
                   <div
                     className="w-3 h-3 rounded-full"
                     style={{ backgroundColor: subtypeColors[subtype] || "hsl(var(--primary))" }}
                   />
                   <span className="text-xs text-muted-foreground">{subtype}</span>
-                </div>
+                </button>
               ))}
             </>
           )}
         </div>
+        {excludedSubtypes.size > 0 && (
+          <p className="text-xs text-center text-muted-foreground mt-2">
+            Showing {filteredSamples.length} of {samples.length} samples
+          </p>
+        )}
       </CardContent>
     </Card>
   );
