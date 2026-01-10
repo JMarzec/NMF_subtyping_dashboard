@@ -290,7 +290,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     <Card className="border-0 bg-card/50 backdrop-blur-sm relative">
       <CardHeader className="flex flex-col space-y-2 pb-2">
         <div className="flex flex-row items-center justify-between flex-wrap gap-2">
-          <CardTitle className="text-lg">Expression Heatmap (Top Marker Genes)</CardTitle>
+          <CardTitle className="text-lg">Expression Heatmap ({data.genes.length} genes × {data.samples.length} samples)</CardTitle>
           <div className="flex items-center gap-4 flex-wrap">
             {userAnnotations && userAnnotations.columns.length > 0 && (
               <AnnotationSelector

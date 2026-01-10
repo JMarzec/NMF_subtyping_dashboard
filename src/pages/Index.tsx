@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { SummaryCards } from "@/components/bioinformatics/SummaryCards";
 import { SubtypeDistribution } from "@/components/bioinformatics/SubtypeDistribution";
 import { ClusterScatter } from "@/components/bioinformatics/ClusterScatter";
+import { PCAScatter } from "@/components/bioinformatics/PCAScatter";
 import { ExpressionHeatmap } from "@/components/bioinformatics/ExpressionHeatmap";
 import { MarkerGenesTable } from "@/components/bioinformatics/MarkerGenesTable";
 import { CopheneticPlot } from "@/components/bioinformatics/CopheneticPlot";
@@ -82,9 +83,14 @@ const Index = () => {
         </div>
 
         {/* Charts Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} subtypeColors={subtypeColors} />
           <ClusterScatter 
+            samples={data.samples} 
+            subtypeColors={subtypeColors} 
+            userAnnotations={userAnnotations}
+          />
+          <PCAScatter 
             samples={data.samples} 
             subtypeColors={subtypeColors} 
             userAnnotations={userAnnotations}
