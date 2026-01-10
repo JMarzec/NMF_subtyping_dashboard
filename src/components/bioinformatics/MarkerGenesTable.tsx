@@ -1,7 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { MarkerGene } from "@/data/mockNmfData";
 import { useState } from "react";
+import { Download } from "lucide-react";
 
 interface MarkerGenesTableProps {
   genes: MarkerGene[];
@@ -34,11 +36,42 @@ export const MarkerGenesTable = ({ genes, subtypeColors }: MarkerGenesTableProps
         return interleaved.slice(0, 20);
       })();
 
+  const exportToCSV = () => {
+    const header = ["Gene", "Subtype", "Weight"];
+    const exportGenes = selectedSubtype ? genes.filter(g => g.subtype === selectedSubtype) : genes;
+    const rows = exportGenes.map(g => [g.gene, g.subtype, g.weight.toString()]);
+    const csvContent = [header, ...rows].map(row => row.join(",")).join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `marker_genes${selectedSubtype ? `_${selectedSubtype}` : ""}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportToTSV = () => {
+    const header = ["Gene", "Subtype", "Weight"];
+    const exportGenes = selectedSubtype ? genes.filter(g => g.subtype === selectedSubtype) : genes;
+    const rows = exportGenes.map(g => [g.gene, g.subtype, g.weight.toString()]);
+    const tsvContent = [header, ...rows].map(row => row.join("\t")).join("\n");
+    
+    const blob = new Blob([tsvContent], { type: "text/tab-separated-values" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `marker_genes${selectedSubtype ? `_${selectedSubtype}` : ""}.tsv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
-      <CardHeader>
-        <CardTitle className="text-lg">Top Marker Genes</CardTitle>
-        <div className="flex flex-wrap gap-2 mt-2">
+      <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
+        <div>
+          <CardTitle className="text-lg">Top Marker Genes</CardTitle>
+          <div className="flex flex-wrap gap-2 mt-2">
           <Badge
             variant="outline"
             className={`cursor-pointer transition-all ${!selectedSubtype ? "bg-primary/20 border-primary" : ""}`}
@@ -65,6 +98,17 @@ export const MarkerGenesTable = ({ genes, subtypeColors }: MarkerGenesTableProps
               {subtype}
             </Badge>
           ))}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={exportToCSV}>
+            <Download className="h-4 w-4 mr-1" />
+            CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportToTSV}>
+            <Download className="h-4 w-4 mr-1" />
+            TSV
+          </Button>
         </div>
       </CardHeader>
       <CardContent>

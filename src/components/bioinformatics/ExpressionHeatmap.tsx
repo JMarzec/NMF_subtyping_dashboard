@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useMemo, useState, useRef, useCallback } from "react";
+import React, { useMemo, useState, useRef, useCallback } from "react";
 import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { generateSubtypeColors } from "@/data/mockNmfData";
@@ -23,6 +23,7 @@ interface ExpressionHeatmapProps {
   data: HeatmapData;
   subtypeColors: Record<string, string>;
   userAnnotations?: AnnotationData;
+  filterResetKey?: number;
 }
 
 type ClusteringMethod = "none" | "average" | "complete" | "single" | "ward";
@@ -223,7 +224,7 @@ const transpose = (matrix: number[][]): number[][] => {
   return matrix[0].map((_, colIndex) => matrix.map(row => row[colIndex]));
 };
 
-export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: ExpressionHeatmapProps) => {
+export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations, filterResetKey }: ExpressionHeatmapProps) => {
   const [hoveredCell, setHoveredCell] = useState<{ gene: string; sample: string; value: number; subtype: string; userAnnotation?: string } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [useZScore, setUseZScore] = useState(false);
@@ -234,6 +235,14 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
   const [showDendrograms, setShowDendrograms] = useState(true);
   const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
   const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
+
+  // Reset filters when global reset key changes
+  React.useEffect(() => {
+    if (filterResetKey !== undefined && filterResetKey > 0) {
+      setExcludedSubtypes(new Set());
+      setExcludedAnnotationValues(new Set());
+    }
+  }, [filterResetKey]);
 
   // Outer scroll container (for UI)
   const heatmapScrollRef = useRef<HTMLDivElement>(null);
@@ -531,25 +540,29 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
             }
           });
 
-          // Fix sample labels - use simpler approach
+          // Fix sample labels - render vertically like in SVG export
           clonedElement.querySelectorAll('[data-heatmap-sample-label="true"]').forEach((el) => {
             if (!(el instanceof HTMLElement)) return;
             const span = el.querySelector('span');
             const sampleName = span?.textContent || '';
             
-            // Clear and rebuild as simple rotated text
-            el.style.writingMode = 'vertical-rl';
-            el.style.textOrientation = 'mixed';
-            el.style.transform = 'rotate(180deg)';
-            el.style.fontSize = '6px';
+            // Use CSS transforms to rotate text vertically (like SVG)
+            el.style.position = 'relative';
+            el.style.height = '60px';
+            el.style.width = `${cellWidth}px`;
             el.style.overflow = 'visible';
-            el.style.display = 'flex';
-            el.style.alignItems = 'center';
-            el.style.justifyContent = 'flex-end';
+            
             if (span) {
+              span.style.position = 'absolute';
+              span.style.transformOrigin = 'left bottom';
+              span.style.transform = 'rotate(-90deg) translateX(-100%)';
+              span.style.whiteSpace = 'nowrap';
+              span.style.fontSize = '6px';
+              span.style.fontFamily = 'Arial, sans-serif';
               span.style.overflow = 'visible';
               span.style.textOverflow = 'clip';
-              span.style.whiteSpace = 'nowrap';
+              span.style.left = `${cellWidth / 2 + 2}px`;
+              span.style.bottom = '0';
             }
           });
         },

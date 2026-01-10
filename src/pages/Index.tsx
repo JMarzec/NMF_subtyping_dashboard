@@ -20,7 +20,8 @@ import {
   defaultRankMetrics,
   defaultSurvivalData,
 } from "@/data/mockNmfData";
-import { Dna } from "lucide-react";
+import { Dna, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
   const [data, setData] = useState<NmfData>({
@@ -33,6 +34,13 @@ const Index = () => {
 
   // User-provided annotation data
   const [userAnnotations, setUserAnnotations] = useState<AnnotationData | undefined>(undefined);
+
+  // Global filter reset key - increment to trigger reset in all components
+  const [filterResetKey, setFilterResetKey] = useState(0);
+
+  const handleGlobalResetFilters = useCallback(() => {
+    setFilterResetKey(prev => prev + 1);
+  }, []);
 
   // Get sample IDs for validation
   const sampleIds = useMemo(() => data.samples.map(s => s.sample_id), [data.samples]);
@@ -56,14 +64,20 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border/50 bg-card/30 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600">
-              <Dna className="h-6 w-6 text-white" />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600">
+                <Dna className="h-6 w-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold">NMF Subtyping Dashboard</h1>
+                <p className="text-sm text-muted-foreground">{data.summary.dataset} Molecular Subtypes</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-xl font-bold">NMF Subtyping Dashboard</h1>
-              <p className="text-sm text-muted-foreground">{data.summary.dataset} Molecular Subtypes</p>
-            </div>
+            <Button variant="outline" size="sm" onClick={handleGlobalResetFilters}>
+              <RotateCcw className="h-4 w-4 mr-1" />
+              Reset All Filters
+            </Button>
           </div>
         </div>
       </header>
@@ -91,6 +105,7 @@ const Index = () => {
             samples={data.samples} 
             subtypeColors={subtypeColors} 
             userAnnotations={userAnnotations}
+            filterResetKey={filterResetKey}
           />
           <div className="space-y-4">
             <PCAScatter 
@@ -98,6 +113,7 @@ const Index = () => {
               subtypeColors={subtypeColors} 
               userAnnotations={userAnnotations}
               heatmapData={heatmapData}
+              filterResetKey={filterResetKey}
             />
             <PCAScreePlot heatmapData={heatmapData} samples={data.samples} />
           </div>
@@ -110,6 +126,7 @@ const Index = () => {
               data={heatmapData} 
               subtypeColors={subtypeColors} 
               userAnnotations={userAnnotations}
+              filterResetKey={filterResetKey}
             />
           </div>
           <div className="space-y-6">
