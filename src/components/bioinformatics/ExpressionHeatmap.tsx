@@ -3,11 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
 import { Download } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { generateSubtypeColors } from "@/data/mockNmfData";
 import { Dendrogram, DendrogramNode } from "./Dendrogram";
+import { downloadChartAsPNG } from "@/lib/chartExport";
 
 import { AnnotationData } from "./AnnotationUploader";
 
@@ -231,6 +232,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
   const [geneClusterMethod, setGeneClusterMethod] = useState<ClusteringMethod>("ward");
   const [distanceMetric, setDistanceMetric] = useState<DistanceMetric>("euclidean");
   const [showDendrograms, setShowDendrograms] = useState(true);
+  const heatmapRef = useRef<HTMLDivElement>(null);
 
   // Generate colors for user annotation values
   const userAnnotationColors = useMemo(() => {
@@ -333,6 +335,12 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     URL.revokeObjectURL(url);
   };
 
+  const handleDownloadPNG = () => {
+    downloadChartAsPNG(heatmapRef.current, "expression-heatmap");
+  };
+
+  const heatmapWidth = cellWidth * data.samples.length;
+
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm relative">
       <CardHeader className="flex flex-col space-y-2 pb-2">
@@ -356,6 +364,10 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
                 Z-score
               </Label>
             </div>
+            <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
+              <Download className="h-4 w-4 mr-1" />
+              PNG
+            </Button>
             <Button variant="outline" size="sm" onClick={exportToCSV}>
               <Download className="h-4 w-4 mr-1" />
               CSV
@@ -418,15 +430,21 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" ref={heatmapRef}>
           {/* Sample dendrogram (horizontal, above heatmap) */}
           {showDendrograms && sampleDendrogram && sampleClusterMethod !== "none" && (
             <div className="flex mb-1">
-              <div style={{ width: 80 }} /> {/* Spacer for gene labels (72 + 8 margin) */}
-              {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 44 }} />} {/* Spacer for gene dendrogram (40 + 4 margin) */}
+              <div style={{ width: heatmapWidth }} />
+              <div style={{ width: 4 }} /> {/* Small gap */}
+              <div style={{ width: 80 }} /> {/* Gene labels spacer */}
+              {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 44 }} />}
+            </div>
+          )}
+          {showDendrograms && sampleDendrogram && sampleClusterMethod !== "none" && (
+            <div className="flex mb-1 justify-start">
               <Dendrogram
                 root={sampleDendrogram}
-                width={cellWidth * data.samples.length}
+                width={heatmapWidth}
                 height={40}
                 orientation="horizontal"
                 itemSize={cellWidth}
@@ -437,10 +455,6 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
           {/* User annotation bar (if selected) */}
           {selectedAnnotation && userAnnotations && (
             <div className="flex mb-0.5">
-              <div className="text-[8px] text-muted-foreground text-right truncate pr-2" style={{ width: 80 }}>
-                {selectedAnnotation}
-              </div>
-              {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 44 }} />}
               <div className="flex">
                 {sortedSampleIndices.map((idx, i) => {
                   const sampleId = data.samples[idx];
@@ -458,15 +472,15 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
                   );
                 })}
               </div>
+              <div style={{ width: 4 }} />
+              <div className="text-[8px] text-muted-foreground text-left truncate pl-1" style={{ width: 80 }}>
+                {selectedAnnotation}
+              </div>
             </div>
           )}
           
           {/* Subtype annotation bar */}
           <div className="flex mb-1">
-            <div className="text-[8px] text-muted-foreground text-right truncate pr-2" style={{ width: 80 }}>
-              NMF Subtype
-            </div>
-            {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 44 }} />}
             <div className="flex">
               {sortedSampleIndices.map((idx, i) => (
                 <div
@@ -480,36 +494,14 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
                 />
               ))}
             </div>
+            <div style={{ width: 4 }} />
+            <div className="text-[8px] text-muted-foreground text-left truncate pl-1" style={{ width: 80 }}>
+              NMF Subtype
+            </div>
           </div>
           
-          {/* Heatmap grid with gene dendrogram */}
+          {/* Heatmap grid with gene dendrogram on RIGHT */}
           <div className="flex">
-            {/* Gene labels */}
-            <div className="flex flex-col pr-2" style={{ width: 80 }}>
-              {sortedGeneIndices.map((geneIdx) => (
-                <div
-                  key={geneIdx}
-                  className="text-xs text-right truncate text-muted-foreground"
-                  style={{ height: cellHeight, lineHeight: `${cellHeight}px` }}
-                >
-                  {data.genes[geneIdx]}
-                </div>
-              ))}
-            </div>
-
-            {/* Gene dendrogram (vertical, left of heatmap) */}
-            {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && (
-              <div className="mr-1" style={{ width: 40 }}>
-                <Dendrogram
-                  root={geneDendrogram}
-                  width={40}
-                  height={cellHeight * data.genes.length}
-                  orientation="vertical"
-                  itemSize={cellHeight}
-                />
-              </div>
-            )}
-            
             {/* Heatmap cells */}
             <div>
               {sortedGeneIndices.map((geneIdx) => (
@@ -527,6 +519,32 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
                       onMouseLeave={() => setHoveredCell(null)}
                     />
                   ))}
+                </div>
+              ))}
+            </div>
+
+            {/* Gene dendrogram (vertical, right of heatmap) */}
+            {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && (
+              <div className="ml-1" style={{ width: 40 }}>
+                <Dendrogram
+                  root={geneDendrogram}
+                  width={40}
+                  height={cellHeight * data.genes.length}
+                  orientation="vertical-right"
+                  itemSize={cellHeight}
+                />
+              </div>
+            )}
+
+            {/* Gene labels on RIGHT */}
+            <div className="flex flex-col pl-2" style={{ width: 80 }}>
+              {sortedGeneIndices.map((geneIdx) => (
+                <div
+                  key={geneIdx}
+                  className="text-xs text-left truncate text-muted-foreground"
+                  style={{ height: cellHeight, lineHeight: `${cellHeight}px` }}
+                >
+                  {data.genes[geneIdx]}
                 </div>
               ))}
             </div>

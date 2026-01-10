@@ -92,11 +92,14 @@ const Index = () => {
             subtypeColors={subtypeColors} 
             userAnnotations={userAnnotations}
           />
-          <PCAScatter 
-            samples={data.samples} 
-            subtypeColors={subtypeColors} 
-            userAnnotations={userAnnotations}
-          />
+          <div className="space-y-4">
+            <PCAScatter 
+              samples={data.samples} 
+              subtypeColors={subtypeColors} 
+              userAnnotations={userAnnotations}
+            />
+            <PCAScreePlot samples={data.samples} />
+          </div>
         </div>
 
         {/* Charts Row 2 */}
@@ -117,9 +120,8 @@ const Index = () => {
           </div>
         </div>
 
-        {/* PCA Analysis Row */}
+        {/* Survival Analysis Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <PCAScreePlot samples={data.samples} />
           <SurvivalCurve data={data.survivalData || []} subtypeColors={subtypeColors} />
         </div>
 

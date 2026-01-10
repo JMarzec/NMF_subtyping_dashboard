@@ -13,7 +13,7 @@ interface DendrogramProps {
   root: DendrogramNode | null;
   width: number;
   height: number;
-  orientation: "horizontal" | "vertical";
+  orientation: "horizontal" | "vertical" | "vertical-right";
   itemSize: number;
 }
 
@@ -76,11 +76,22 @@ export const Dendrogram = ({ root, width, height, orientation, itemSize }: Dendr
         // Vertical lines to children
         lines.push({ x1: leftPos, y1: yNode, x2: leftPos, y2: yLeft });
         lines.push({ x1: rightPos, y1: yNode, x2: rightPos, y2: yRight });
-      } else {
+      } else if (orientation === "vertical") {
         // For left dendrogram (genes)
         const xNode = width - (node.distance / maxDist) * width;
         const xLeft = width - (leftDist / maxDist) * width;
         const xRight = width - (rightDist / maxDist) * width;
+
+        // Vertical line connecting children
+        lines.push({ x1: xNode, y1: leftPos, x2: xNode, y2: rightPos });
+        // Horizontal lines to children
+        lines.push({ x1: xNode, y1: leftPos, x2: xLeft, y2: leftPos });
+        lines.push({ x1: xNode, y1: rightPos, x2: xRight, y2: rightPos });
+      } else {
+        // vertical-right: For right dendrogram (genes) - mirrored
+        const xNode = (node.distance / maxDist) * width;
+        const xLeft = (leftDist / maxDist) * width;
+        const xRight = (rightDist / maxDist) * width;
 
         // Vertical line connecting children
         lines.push({ x1: xNode, y1: leftPos, x2: xNode, y2: rightPos });

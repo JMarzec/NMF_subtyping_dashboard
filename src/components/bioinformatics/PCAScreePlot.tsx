@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Line, ComposedChart } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Line, ComposedChart, ReferenceLine } from "recharts";
 import { SampleResult } from "@/data/mockNmfData";
 import { useMemo, useRef } from "react";
 import { Download } from "lucide-react";
@@ -49,11 +49,11 @@ const computeAllPCAVariance = (data: number[][]): { variances: number[]; cumulat
     totalVariance += cov[i][i];
   }
 
-  // Power iteration for eigenvalues
+  // Power iteration for eigenvalues - compute ALL components
   const eigenvalues: number[] = [];
   let currentCov = cov.map(row => [...row]);
 
-  for (let pc = 0; pc < Math.min(m, 10); pc++) {
+  for (let pc = 0; pc < m; pc++) {
     let vector = Array(m).fill(0).map(() => Math.random());
     let norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
     vector = vector.map(v => v / norm);
@@ -72,12 +72,14 @@ const computeAllPCAVariance = (data: number[][]): { variances: number[]; cumulat
       vector = newVector.map(v => v / norm);
     }
 
-    if (eigenvalue > 0) {
+    if (eigenvalue > 0.001) {
       eigenvalues.push(eigenvalue);
       // Deflate
       currentCov = currentCov.map((row, i) =>
         row.map((v, j) => v - eigenvalue * vector[i] * vector[j])
       );
+    } else {
+      break;
     }
   }
 
@@ -122,38 +124,39 @@ export const PCAScreePlot = ({ samples }: PCAScreePlotProps) => {
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-lg">PCA Scree Plot</CardTitle>
+        <CardTitle className="text-lg">PCA Scree Plot ({chartData.length} components)</CardTitle>
         <Button variant="outline" size="sm" onClick={handleDownload}>
           <Download className="h-4 w-4 mr-1" />
           PNG
         </Button>
       </CardHeader>
       <CardContent>
-        <div ref={chartRef} className="h-[280px] bg-card">
+        <div ref={chartRef} className="h-[200px] bg-card">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={chartData} margin={{ top: 10, right: 30, bottom: 30, left: 10 }}>
+            <ComposedChart data={chartData} margin={{ top: 10, right: 40, bottom: 30, left: 10 }}>
               <XAxis
                 dataKey="pc"
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 9 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
-                label={{ value: "Principal Component", position: "bottom", offset: 10, fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                interval={chartData.length > 10 ? Math.floor(chartData.length / 10) : 0}
+                label={{ value: "Principal Component", position: "bottom", offset: 10, fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
               />
               <YAxis
                 yAxisId="left"
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 9 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
-                label={{ value: "Variance (%)", angle: -90, position: "insideLeft", fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                label={{ value: "Variance (%)", angle: -90, position: "insideLeft", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
                 domain={[0, 100]}
-                tick={{ fontSize: 10 }}
+                tick={{ fontSize: 9 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
-                label={{ value: "Cumulative (%)", angle: 90, position: "insideRight", fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                label={{ value: "Cumulative (%)", angle: 90, position: "insideRight", fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
               />
               <Tooltip
                 contentStyle={{
@@ -166,7 +169,7 @@ export const PCAScreePlot = ({ samples }: PCAScreePlotProps) => {
                   name === "variance" ? "Variance" : "Cumulative"
                 ]}
               />
-              <Bar yAxisId="left" dataKey="variance" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]}>
+              <Bar yAxisId="left" dataKey="variance" fill="hsl(var(--primary))" radius={[2, 2, 0, 0]}>
                 {chartData.map((_, index) => (
                   <Cell key={`cell-${index}`} fillOpacity={0.8} />
                 ))}
@@ -177,11 +180,15 @@ export const PCAScreePlot = ({ samples }: PCAScreePlotProps) => {
                 dataKey="cumulative"
                 stroke="hsl(var(--destructive))"
                 strokeWidth={2}
-                dot={{ fill: "hsl(var(--destructive))", r: 4 }}
+                dot={{ fill: "hsl(var(--destructive))", r: 3 }}
               />
+              <ReferenceLine yAxisId="right" y={80} stroke="hsl(var(--muted-foreground))" strokeDasharray="3 3" strokeOpacity={0.5} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+        <p className="text-xs text-center text-muted-foreground mt-2">
+          Dashed line indicates 80% cumulative variance threshold
+        </p>
       </CardContent>
     </Card>
   );
