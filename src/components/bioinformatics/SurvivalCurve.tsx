@@ -79,15 +79,15 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
         </div>
       </CardHeader>
       <CardContent>
-        <div ref={chartRef} className="h-[280px] bg-card">
+        <div ref={chartRef} className="h-[320px] bg-card">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 40 }}>
+            <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
               <XAxis
                 dataKey="time"
                 tick={{ fontSize: 11 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
-                label={{ value: "Time (months)", position: "bottom", offset: 15, fontSize: 11 }}
+                label={{ value: "Time (months)", position: "insideBottom", offset: -5, fontSize: 11 }}
               />
               <YAxis
                 domain={[0, 1]}
@@ -111,7 +111,8 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
                 labelFormatter={(time) => `Time: ${time} months`}
               />
               <Legend 
-                wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }}
+                verticalAlign="top"
+                wrapperStyle={{ fontSize: "12px", paddingBottom: "10px" }}
                 iconType="line"
               />
               {subtypes.map((subtype) => (

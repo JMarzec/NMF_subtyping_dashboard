@@ -544,25 +544,25 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations, filter
           clonedElement.querySelectorAll('[data-heatmap-sample-label="true"]').forEach((el) => {
             if (!(el instanceof HTMLElement)) return;
             const span = el.querySelector('span');
-            const sampleName = span?.textContent || '';
             
             // Use CSS transforms to rotate text vertically (like SVG)
             el.style.position = 'relative';
-            el.style.height = '60px';
+            el.style.height = '50px';
             el.style.width = `${cellWidth}px`;
             el.style.overflow = 'visible';
+            el.style.marginTop = '4px';
             
             if (span) {
               span.style.position = 'absolute';
-              span.style.transformOrigin = 'left bottom';
+              span.style.transformOrigin = 'left top';
               span.style.transform = 'rotate(-90deg) translateX(-100%)';
               span.style.whiteSpace = 'nowrap';
               span.style.fontSize = '6px';
               span.style.fontFamily = 'Arial, sans-serif';
               span.style.overflow = 'visible';
               span.style.textOverflow = 'clip';
-              span.style.left = `${cellWidth / 2 + 2}px`;
-              span.style.bottom = '0';
+              span.style.left = `${cellWidth / 2 + 3}px`;
+              span.style.top = '0';
             }
           });
         },
