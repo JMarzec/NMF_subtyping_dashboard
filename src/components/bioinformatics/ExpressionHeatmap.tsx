@@ -547,22 +547,24 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations, filter
             
             // Use CSS transforms to rotate text vertically (like SVG)
             el.style.position = 'relative';
-            el.style.height = '50px';
+            el.style.height = '55px';
             el.style.width = `${cellWidth}px`;
             el.style.overflow = 'visible';
-            el.style.marginTop = '4px';
+            el.style.marginTop = '0px';
             
             if (span) {
               span.style.position = 'absolute';
-              span.style.transformOrigin = 'left top';
-              span.style.transform = 'rotate(-90deg) translateX(-100%)';
+              span.style.transformOrigin = 'center center';
+              span.style.transform = 'rotate(-90deg)';
               span.style.whiteSpace = 'nowrap';
               span.style.fontSize = '6px';
               span.style.fontFamily = 'Arial, sans-serif';
               span.style.overflow = 'visible';
               span.style.textOverflow = 'clip';
-              span.style.left = `${cellWidth / 2 + 3}px`;
-              span.style.top = '0';
+              span.style.left = '50%';
+              span.style.top = '50%';
+              span.style.marginLeft = '-25px';
+              span.style.marginTop = '-5px';
             }
           });
         },
@@ -799,44 +801,54 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations, filter
       xOffset += 16 + subtype.length * 6 + 20;
     });
 
-    // User annotation legend (if selected)
-    if (hasUserAnnotLegend && selectedAnnotation) {
+    // User annotation legend (if selected) - always render if annotation is selected
+    if (selectedAnnotation && userAnnotations) {
       const userAnnotLegendY = subtypeLegendY + 22;
       let annotXOffset = padding.left;
 
-      // Add annotation name label
-      const annotLegendLabel = document.createElementNS(svgNS, "text");
-      annotLegendLabel.setAttribute("x", String(annotXOffset));
-      annotLegendLabel.setAttribute("y", String(userAnnotLegendY + 10));
-      annotLegendLabel.setAttribute("font-size", "10");
-      annotLegendLabel.setAttribute("font-family", "Arial, sans-serif");
-      annotLegendLabel.setAttribute("font-weight", "500");
-      annotLegendLabel.setAttribute("fill", "#6b7280");
-      annotLegendLabel.textContent = `${selectedAnnotation}:`;
-      svg.appendChild(annotLegendLabel);
-      annotXOffset += selectedAnnotation.length * 6 + 16;
-
-      userAnnotEntries.forEach(([value, color]) => {
-        const rect = document.createElementNS(svgNS, "rect");
-        rect.setAttribute("x", String(annotXOffset));
-        rect.setAttribute("y", String(userAnnotLegendY));
-        rect.setAttribute("width", "12");
-        rect.setAttribute("height", "12");
-        rect.setAttribute("rx", "2");
-        rect.setAttribute("fill", color);
-        svg.appendChild(rect);
-
-        const text = document.createElementNS(svgNS, "text");
-        text.setAttribute("x", String(annotXOffset + 16));
-        text.setAttribute("y", String(userAnnotLegendY + 10));
-        text.setAttribute("font-size", "10");
-        text.setAttribute("font-family", "Arial, sans-serif");
-        text.setAttribute("fill", "#4b5563");
-        text.textContent = value;
-        svg.appendChild(text);
-
-        annotXOffset += 16 + value.length * 6 + 20;
+      // Get annotation values from the data
+      const annotationValues = new Set<string>();
+      Object.values(userAnnotations.annotations).forEach(annot => {
+        if (annot[selectedAnnotation]) annotationValues.add(annot[selectedAnnotation]);
       });
+      const sortedAnnotValues = [...annotationValues].sort();
+
+      if (sortedAnnotValues.length > 0) {
+        // Add annotation name label
+        const annotLegendLabel = document.createElementNS(svgNS, "text");
+        annotLegendLabel.setAttribute("x", String(annotXOffset));
+        annotLegendLabel.setAttribute("y", String(userAnnotLegendY + 10));
+        annotLegendLabel.setAttribute("font-size", "10");
+        annotLegendLabel.setAttribute("font-family", "Arial, sans-serif");
+        annotLegendLabel.setAttribute("font-weight", "500");
+        annotLegendLabel.setAttribute("fill", "#6b7280");
+        annotLegendLabel.textContent = `${selectedAnnotation}:`;
+        svg.appendChild(annotLegendLabel);
+        annotXOffset += selectedAnnotation.length * 6 + 16;
+
+        sortedAnnotValues.forEach((value) => {
+          const color = userAnnotationColors[value] || "#6b7280";
+          const rect = document.createElementNS(svgNS, "rect");
+          rect.setAttribute("x", String(annotXOffset));
+          rect.setAttribute("y", String(userAnnotLegendY));
+          rect.setAttribute("width", "12");
+          rect.setAttribute("height", "12");
+          rect.setAttribute("rx", "2");
+          rect.setAttribute("fill", color);
+          svg.appendChild(rect);
+
+          const text = document.createElementNS(svgNS, "text");
+          text.setAttribute("x", String(annotXOffset + 16));
+          text.setAttribute("y", String(userAnnotLegendY + 10));
+          text.setAttribute("font-size", "10");
+          text.setAttribute("font-family", "Arial, sans-serif");
+          text.setAttribute("fill", "#4b5563");
+          text.textContent = value;
+          svg.appendChild(text);
+
+          annotXOffset += 16 + value.length * 6 + 20;
+        });
+      }
     }
 
     const serializer = new XMLSerializer();
