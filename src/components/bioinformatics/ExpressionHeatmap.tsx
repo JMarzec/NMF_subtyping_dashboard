@@ -234,7 +234,11 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
   const [showDendrograms, setShowDendrograms] = useState(true);
   const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
   const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
-  const heatmapRef = useRef<HTMLDivElement>(null);
+
+  // Outer scroll container (for UI)
+  const heatmapScrollRef = useRef<HTMLDivElement>(null);
+  // Inner content container (for exports)
+  const heatmapExportRef = useRef<HTMLDivElement>(null);
 
   // Generate colors for user annotation values
   const userAnnotationColors = useMemo(() => {
@@ -275,12 +279,12 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
   // Filter samples based on exclusions
   const filteredData = useMemo(() => {
     let includedIndices = data.samples.map((_, i) => i);
-    
+
     // Filter by subtype exclusions
     if (excludedSubtypes.size > 0) {
       includedIndices = includedIndices.filter(i => !excludedSubtypes.has(data.sampleSubtypes[i]));
     }
-    
+
     // Filter by annotation exclusions
     if (selectedAnnotation && userAnnotations && excludedAnnotationValues.size > 0) {
       includedIndices = includedIndices.filter(i => {
@@ -289,7 +293,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
         return !annotValue || !excludedAnnotationValues.has(annotValue);
       });
     }
-    
+
     return {
       samples: includedIndices.map(i => data.samples[i]),
       sampleSubtypes: includedIndices.map(i => data.sampleSubtypes[i]),
@@ -304,7 +308,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     const allValues = normalizedValues.flat();
     const min = allValues.length > 0 ? Math.min(...allValues) : 0;
     const max = allValues.length > 0 ? Math.max(...allValues) : 1;
-    
+
     // Cluster or sort samples
     let sampleIndices: number[];
     let sampleTree: DendrogramNode | null = null;
@@ -320,7 +324,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
         .sort((a, b) => a.subtype.localeCompare(b.subtype))
         .map(item => item.idx);
     }
-    
+
     // Cluster or keep original gene order
     let geneIndices: number[];
     let geneTree: DendrogramNode | null = null;
@@ -331,18 +335,18 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     } else {
       geneIndices = filteredData.genes.map((_, i) => i);
     }
-    
+
     const subtypes = [...new Set(data.sampleSubtypes)].sort(); // Use original data for all subtypes
-    
-    return { 
-      displayValues: normalizedValues, 
-      minVal: min, 
-      maxVal: max, 
-      sortedSampleIndices: sampleIndices, 
+
+    return {
+      displayValues: normalizedValues,
+      minVal: min,
+      maxVal: max,
+      sortedSampleIndices: sampleIndices,
       sortedGeneIndices: geneIndices,
       uniqueSubtypes: subtypes,
       sampleDendrogram: sampleTree,
-      geneDendrogram: geneTree
+      geneDendrogram: geneTree,
     };
   }, [filteredData, data.sampleSubtypes, useZScore, sampleClusterMethod, geneClusterMethod, distanceMetric]);
 
@@ -376,11 +380,11 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
       filteredData.genes[geneIdx],
       ...sortedSampleIndices.map(sampleIdx => displayValues[geneIdx][sampleIdx].toFixed(4))
     ]);
-    
+
     const csvContent = [header, subtypeRow, ...dataRows]
       .map(row => row.join(","))
       .join("\n");
-    
+
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -390,53 +394,139 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     URL.revokeObjectURL(url);
   };
 
+  // Helper: get dendrogram line segments (same logic as Dendrogram component)
+  const getDendrogramLines = useCallback((
+    root: DendrogramNode,
+    width: number,
+    height: number,
+    orientation: "horizontal" | "vertical" | "vertical-right",
+    itemSize: number
+  ): { x1: number; y1: number; x2: number; y2: number }[] => {
+    if (!root || (!root.left && !root.right)) return [];
+
+    const leafPositions = new Map<number, number>();
+    const currentPos = { value: itemSize / 2 };
+
+    const getLeafPositions = (node: DendrogramNode) => {
+      if (!node.left && !node.right) {
+        leafPositions.set(node.indices[0], currentPos.value);
+        currentPos.value += itemSize;
+        return;
+      }
+      if (node.left) getLeafPositions(node.left);
+      if (node.right) getLeafPositions(node.right);
+    };
+
+    const getNodePosition = (node: DendrogramNode): number => {
+      if (!node.left && !node.right) {
+        return leafPositions.get(node.indices[0]) || 0;
+      }
+      const leftPos = node.left ? getNodePosition(node.left) : 0;
+      const rightPos = node.right ? getNodePosition(node.right) : 0;
+      return (leftPos + rightPos) / 2;
+    };
+
+    const getMaxDistance = (node: DendrogramNode): number => {
+      if (!node.left && !node.right) return 0;
+      const leftMax = node.left ? getMaxDistance(node.left) : 0;
+      const rightMax = node.right ? getMaxDistance(node.right) : 0;
+      return Math.max(node.distance, leftMax, rightMax);
+    };
+
+    getLeafPositions(root);
+    const maxDist = getMaxDistance(root);
+    if (maxDist === 0) return [];
+
+    const lines: { x1: number; y1: number; x2: number; y2: number }[] = [];
+
+    const traverse = (node: DendrogramNode) => {
+      if (!node.left || !node.right) return;
+
+      const nodePos = getNodePosition(node);
+      const leftPos = getNodePosition(node.left);
+      const rightPos = getNodePosition(node.right);
+
+      const leftDist = node.left.distance;
+      const rightDist = node.right.distance;
+
+      if (orientation === "horizontal") {
+        const yNode = height - (node.distance / maxDist) * height;
+        const yLeft = height - (leftDist / maxDist) * height;
+        const yRight = height - (rightDist / maxDist) * height;
+        lines.push({ x1: leftPos, y1: yNode, x2: rightPos, y2: yNode });
+        lines.push({ x1: leftPos, y1: yNode, x2: leftPos, y2: yLeft });
+        lines.push({ x1: rightPos, y1: yNode, x2: rightPos, y2: yRight });
+      } else if (orientation === "vertical") {
+        const xNode = width - (node.distance / maxDist) * width;
+        const xLeft = width - (leftDist / maxDist) * width;
+        const xRight = width - (rightDist / maxDist) * width;
+        lines.push({ x1: xNode, y1: leftPos, x2: xNode, y2: rightPos });
+        lines.push({ x1: xNode, y1: leftPos, x2: xLeft, y2: leftPos });
+        lines.push({ x1: xNode, y1: rightPos, x2: xRight, y2: rightPos });
+      } else {
+        const xNode = (node.distance / maxDist) * width;
+        const xLeft = (leftDist / maxDist) * width;
+        const xRight = (rightDist / maxDist) * width;
+        lines.push({ x1: xNode, y1: leftPos, x2: xNode, y2: rightPos });
+        lines.push({ x1: xNode, y1: leftPos, x2: xLeft, y2: leftPos });
+        lines.push({ x1: xNode, y1: rightPos, x2: xRight, y2: rightPos });
+      }
+
+      traverse(node.left);
+      traverse(node.right);
+    };
+
+    traverse(root);
+    return lines;
+  }, []);
+
   const handleDownloadPNG = async () => {
-    if (!heatmapRef.current) return;
+    if (!heatmapExportRef.current) return;
     try {
-      const element = heatmapRef.current;
-      
-      // Calculate required dimensions including all content
+      const element = heatmapExportRef.current;
       const scrollWidth = element.scrollWidth;
       const scrollHeight = element.scrollHeight;
-      
+
+      // Keep resolution modest; focus on text correctness
       const canvas = await html2canvas(element, {
         backgroundColor: "#ffffff",
-        scale: 4,
+        scale: 2,
         logging: false,
         useCORS: true,
         allowTaint: true,
-        width: scrollWidth + 200,
-        height: scrollHeight + 150,
-        windowWidth: scrollWidth + 200,
-        windowHeight: scrollHeight + 150,
-        x: 0,
-        y: 0,
+        width: scrollWidth,
+        height: scrollHeight,
+        windowWidth: scrollWidth,
+        windowHeight: scrollHeight,
         scrollX: 0,
         scrollY: 0,
-        onclone: (clonedDoc, clonedElement) => {
-          // Force all text to use web-safe fonts
-          const allElements = clonedElement.querySelectorAll('*');
-          allElements.forEach((el) => {
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.body.querySelector('[data-heatmap-export="true"]') as HTMLElement | null;
+          if (!clonedElement) return;
+
+          // Force all text to web-safe fonts (html2canvas + vertical text is picky)
+          clonedElement.querySelectorAll('*').forEach((el) => {
             if (el instanceof HTMLElement) {
-              // Use system fonts that render reliably
-              el.style.fontFamily = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
-              
-              // Fix vertical text rendering
-              if (el.style.writingMode === 'vertical-rl' || getComputedStyle(el).writingMode === 'vertical-rl') {
-                el.style.fontFamily = 'Arial, sans-serif';
-                el.style.letterSpacing = '0px';
-                el.style.fontSize = '8px';
-              }
+              el.style.fontFamily = 'Arial, sans-serif';
             }
           });
-          
-          // Add padding to the container
-          clonedElement.style.padding = '20px';
-          clonedElement.style.paddingRight = '180px';
-          clonedElement.style.paddingBottom = '120px';
-        }
+
+          // Replace CSS writing-mode labels with rotate transform (renders more reliably)
+          clonedElement.querySelectorAll('[data-heatmap-sample-label="true"]').forEach((el) => {
+            if (!(el instanceof HTMLElement)) return;
+            el.style.writingMode = 'horizontal-tb';
+            el.style.textOrientation = 'mixed';
+            el.style.transform = 'rotate(-90deg)';
+            el.style.transformOrigin = 'left top';
+            el.style.height = `${Math.max(40, (el.clientHeight || 50))}px`;
+            el.style.width = `${Math.max(40, (el.clientWidth || 10))}px`;
+            el.style.display = 'flex';
+            el.style.alignItems = 'flex-start';
+            el.style.justifyContent = 'flex-start';
+          });
+        },
       });
-      
+
       const link = document.createElement("a");
       link.download = "expression-heatmap.png";
       link.href = canvas.toDataURL("image/png");
@@ -447,89 +537,155 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
   };
 
   const handleDownloadSVG = () => {
-    if (!heatmapRef.current) return;
-    
-    // Create SVG from the heatmap content
+    if (!heatmapExportRef.current) return;
+
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
-    
-    const padding = { top: 80, right: 120, bottom: 100, left: 20 };
+
     const heatmapWidthPx = cellWidth * filteredData.samples.length;
     const heatmapHeightPx = cellHeight * filteredData.genes.length;
-    const dendrogramWidth = showDendrograms && geneDendrogram ? 50 : 0;
+
+    const hasSampleDendro = showDendrograms && !!sampleDendrogram && sampleClusterMethod !== "none";
+    const hasGeneDendro = showDendrograms && !!geneDendrogram && geneClusterMethod !== "none";
+
+    const sampleDendroH = hasSampleDendro ? 40 : 0;
+    const sampleLabelH = 60;
+    const annotBarsH = (selectedAnnotation && userAnnotations ? 10 : 0) + 10; // user annot + subtype
+
+    const padding = { top: 20, right: 140, bottom: 120, left: 20 };
+    const topBlockH = sampleDendroH + sampleLabelH + annotBarsH;
+
+    const dendrogramWidth = hasGeneDendro ? 40 : 0;
     const geneLabelWidth = 100;
-    
-    const totalWidth = padding.left + heatmapWidthPx + dendrogramWidth + geneLabelWidth + padding.right;
-    const totalHeight = padding.top + heatmapHeightPx + padding.bottom;
-    
+
+    const totalWidth = padding.left + heatmapWidthPx + 4 + dendrogramWidth + geneLabelWidth + padding.right;
+    const totalHeight = padding.top + topBlockH + heatmapHeightPx + padding.bottom;
+
     svg.setAttribute("width", String(totalWidth));
     svg.setAttribute("height", String(totalHeight));
     svg.setAttribute("xmlns", svgNS);
-    
-    // White background
+
     const bg = document.createElementNS(svgNS, "rect");
     bg.setAttribute("width", "100%");
     bg.setAttribute("height", "100%");
     bg.setAttribute("fill", "white");
     svg.appendChild(bg);
-    
-    // Sample names (vertical)
-    sortedSampleIndices.forEach((idx, i) => {
+
+    const yDendro = padding.top;
+    const ySampleLabels = padding.top + sampleDendroH + sampleLabelH - 8;
+    const ySubtypeBar = padding.top + sampleDendroH + sampleLabelH + (selectedAnnotation && userAnnotations ? 10 : 0) + 2;
+    const yUserAnnotBar = padding.top + sampleDendroH + sampleLabelH + 2;
+    const yCellsStart = padding.top + topBlockH;
+
+    // Sample dendrogram
+    if (hasSampleDendro && sampleDendrogram) {
+      const lines = getDendrogramLines(sampleDendrogram, heatmapWidthPx, sampleDendroH, "horizontal", cellWidth);
+      lines.forEach((l) => {
+        const line = document.createElementNS(svgNS, "line");
+        line.setAttribute("x1", String(padding.left + l.x1));
+        line.setAttribute("y1", String(yDendro + l.y1));
+        line.setAttribute("x2", String(padding.left + l.x2));
+        line.setAttribute("y2", String(yDendro + l.y2));
+        line.setAttribute("stroke", "#6b7280");
+        line.setAttribute("stroke-width", "0.5");
+        line.setAttribute("stroke-opacity", "0.6");
+        svg.appendChild(line);
+      });
+    }
+
+    // Sample names (rotated)
+    sortedSampleIndices.forEach((sampleIdx, i) => {
+      const sampleName = filteredData.samples[sampleIdx];
+      const x = padding.left + i * cellWidth + cellWidth / 2;
+      const y = ySampleLabels;
+
       const text = document.createElementNS(svgNS, "text");
-      text.setAttribute("x", String(padding.left + i * cellWidth + cellWidth / 2));
-      text.setAttribute("y", String(padding.top - 5));
-      text.setAttribute("font-size", "6");
+      text.setAttribute("x", String(x));
+      text.setAttribute("y", String(y));
+      text.setAttribute("font-size", "7");
       text.setAttribute("font-family", "Arial, sans-serif");
-      text.setAttribute("fill", "#666");
-      text.setAttribute("text-anchor", "start");
-      text.setAttribute("transform", `rotate(-90, ${padding.left + i * cellWidth + cellWidth / 2}, ${padding.top - 5})`);
-      text.textContent = filteredData.samples[idx];
+      text.setAttribute("fill", "#4b5563");
+      text.setAttribute("text-anchor", "end");
+      text.setAttribute("transform", `rotate(-90, ${x}, ${y})`);
+      text.textContent = sampleName;
       svg.appendChild(text);
     });
-    
+
+    // Optional user annotation bar
+    if (selectedAnnotation && userAnnotations) {
+      sortedSampleIndices.forEach((sampleIdx, i) => {
+        const sampleId = filteredData.samples[sampleIdx];
+        const value = userAnnotations.annotations[sampleId]?.[selectedAnnotation] || "";
+        const rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", String(padding.left + i * cellWidth));
+        rect.setAttribute("y", String(yUserAnnotBar));
+        rect.setAttribute("width", String(cellWidth));
+        rect.setAttribute("height", "8");
+        rect.setAttribute("fill", userAnnotationColors[value] || "#e5e7eb");
+        svg.appendChild(rect);
+      });
+    }
+
     // Subtype annotation bar
-    sortedSampleIndices.forEach((idx, i) => {
+    sortedSampleIndices.forEach((sampleIdx, i) => {
       const rect = document.createElementNS(svgNS, "rect");
       rect.setAttribute("x", String(padding.left + i * cellWidth));
-      rect.setAttribute("y", String(padding.top - 12));
+      rect.setAttribute("y", String(ySubtypeBar));
       rect.setAttribute("width", String(cellWidth));
       rect.setAttribute("height", "8");
-      rect.setAttribute("fill", subtypeColors[filteredData.sampleSubtypes[idx]] || "#666");
+      rect.setAttribute("fill", subtypeColors[filteredData.sampleSubtypes[sampleIdx]] || "#6b7280");
       svg.appendChild(rect);
     });
-    
+
     // Heatmap cells
     sortedGeneIndices.forEach((geneIdx, gi) => {
       sortedSampleIndices.forEach((sampleIdx, si) => {
         const rect = document.createElementNS(svgNS, "rect");
         rect.setAttribute("x", String(padding.left + si * cellWidth));
-        rect.setAttribute("y", String(padding.top + gi * cellHeight));
+        rect.setAttribute("y", String(yCellsStart + gi * cellHeight));
         rect.setAttribute("width", String(cellWidth));
         rect.setAttribute("height", String(cellHeight));
         rect.setAttribute("fill", getHeatmapColor(displayValues[geneIdx][sampleIdx], minVal, maxVal));
         svg.appendChild(rect);
       });
     });
-    
-    // Gene labels on right
+
+    // Gene dendrogram (right)
+    if (hasGeneDendro && geneDendrogram) {
+      const xOffset = padding.left + heatmapWidthPx + 4;
+      const yOffset = yCellsStart;
+      const lines = getDendrogramLines(geneDendrogram, 40, heatmapHeightPx, "vertical-right", cellHeight);
+      lines.forEach((l) => {
+        const line = document.createElementNS(svgNS, "line");
+        line.setAttribute("x1", String(xOffset + l.x1));
+        line.setAttribute("y1", String(yOffset + l.y1));
+        line.setAttribute("x2", String(xOffset + l.x2));
+        line.setAttribute("y2", String(yOffset + l.y2));
+        line.setAttribute("stroke", "#6b7280");
+        line.setAttribute("stroke-width", "0.5");
+        line.setAttribute("stroke-opacity", "0.6");
+        svg.appendChild(line);
+      });
+    }
+
+    // Gene labels
     sortedGeneIndices.forEach((geneIdx, gi) => {
       const text = document.createElementNS(svgNS, "text");
-      text.setAttribute("x", String(padding.left + heatmapWidthPx + dendrogramWidth + 10));
-      text.setAttribute("y", String(padding.top + gi * cellHeight + cellHeight / 2 + 3));
+      text.setAttribute("x", String(padding.left + heatmapWidthPx + 4 + dendrogramWidth + 10));
+      text.setAttribute("y", String(yCellsStart + gi * cellHeight + cellHeight / 2 + 3));
       text.setAttribute("font-size", "10");
       text.setAttribute("font-family", "Arial, sans-serif");
-      text.setAttribute("fill", "#666");
+      text.setAttribute("fill", "#4b5563");
       text.textContent = filteredData.genes[geneIdx];
       svg.appendChild(text);
     });
-    
+
     // Color scale legend
-    const legendY = padding.top + heatmapHeightPx + 30;
+    const legendY = yCellsStart + heatmapHeightPx + 30;
     const legendWidth = 200;
     const legendHeight = 12;
     const legendX = (totalWidth - legendWidth) / 2;
-    
-    // Legend gradient
+
     for (let i = 0; i < 50; i++) {
       const rect = document.createElementNS(svgNS, "rect");
       rect.setAttribute("x", String(legendX + i * (legendWidth / 50)));
@@ -539,26 +695,25 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
       rect.setAttribute("fill", getHeatmapColor(i / 49, 0, 1));
       svg.appendChild(rect);
     }
-    
-    // Legend labels
+
     const lowLabel = document.createElementNS(svgNS, "text");
     lowLabel.setAttribute("x", String(legendX - 30));
     lowLabel.setAttribute("y", String(legendY + legendHeight / 2 + 4));
     lowLabel.setAttribute("font-size", "10");
     lowLabel.setAttribute("font-family", "Arial, sans-serif");
-    lowLabel.setAttribute("fill", "#666");
+    lowLabel.setAttribute("fill", "#4b5563");
     lowLabel.textContent = useZScore ? "Low (Z)" : "Low";
     svg.appendChild(lowLabel);
-    
+
     const highLabel = document.createElementNS(svgNS, "text");
     highLabel.setAttribute("x", String(legendX + legendWidth + 5));
     highLabel.setAttribute("y", String(legendY + legendHeight / 2 + 4));
     highLabel.setAttribute("font-size", "10");
     highLabel.setAttribute("font-family", "Arial, sans-serif");
-    highLabel.setAttribute("fill", "#666");
+    highLabel.setAttribute("fill", "#4b5563");
     highLabel.textContent = useZScore ? "High (Z)" : "High";
     svg.appendChild(highLabel);
-    
+
     // Subtype legend
     const subtypeLegendY = legendY + 35;
     let xOffset = padding.left;
@@ -569,22 +724,21 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
       rect.setAttribute("width", "12");
       rect.setAttribute("height", "12");
       rect.setAttribute("rx", "2");
-      rect.setAttribute("fill", subtypeColors[subtype] || "#666");
+      rect.setAttribute("fill", subtypeColors[subtype] || "#6b7280");
       svg.appendChild(rect);
-      
+
       const text = document.createElementNS(svgNS, "text");
       text.setAttribute("x", String(xOffset + 16));
       text.setAttribute("y", String(subtypeLegendY + 10));
       text.setAttribute("font-size", "10");
       text.setAttribute("font-family", "Arial, sans-serif");
-      text.setAttribute("fill", "#666");
+      text.setAttribute("fill", "#4b5563");
       text.textContent = subtype;
       svg.appendChild(text);
-      
+
       xOffset += 16 + subtype.length * 6 + 20;
     });
-    
-    // Download SVG
+
     const serializer = new XMLSerializer();
     const svgString = serializer.serializeToString(svg);
     const blob = new Blob([svgString], { type: "image/svg+xml" });
@@ -709,8 +863,8 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
         </div>
       </CardHeader>
       <CardContent className="pb-6">
-        <div className="overflow-x-auto" ref={heatmapRef}>
-          {/* Sample dendrogram (horizontal, above heatmap) */}
+        <div className="overflow-x-auto" ref={heatmapScrollRef}>
+          <div ref={heatmapExportRef} data-heatmap-export="true">
           {showDendrograms && sampleDendrogram && sampleClusterMethod !== "none" && (
             <div className="flex mb-1">
               <div style={{ width: heatmapWidth }} />
@@ -737,6 +891,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
               {sortedSampleIndices.map((idx, i) => (
                 <div
                   key={`sample-${i}`}
+                  data-heatmap-sample-label="true"
                   className="text-[6px] text-muted-foreground overflow-hidden"
                   style={{
                     width: cellWidth,
@@ -923,6 +1078,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
               })}
             </div>
           )}
+          </div>
         </div>
 
         {/* Tooltip */}
