@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { generateSubtypeColors } from "@/data/mockNmfData";
+import { Dendrogram, DendrogramNode } from "./Dendrogram";
 
 import { AnnotationData } from "./AnnotationUploader";
 
@@ -24,6 +25,7 @@ interface ExpressionHeatmapProps {
 }
 
 type ClusteringMethod = "none" | "average" | "complete" | "single" | "ward";
+type DistanceMetric = "euclidean" | "manhattan" | "correlation";
 
 const CLUSTERING_METHODS: { value: ClusteringMethod; label: string }[] = [
   { value: "none", label: "None" },
@@ -31,6 +33,12 @@ const CLUSTERING_METHODS: { value: ClusteringMethod; label: string }[] = [
   { value: "complete", label: "Complete" },
   { value: "single", label: "Single" },
   { value: "ward", label: "Ward" },
+];
+
+const DISTANCE_METRICS: { value: DistanceMetric; label: string }[] = [
+  { value: "euclidean", label: "Euclidean" },
+  { value: "manhattan", label: "Manhattan" },
+  { value: "correlation", label: "Correlation" },
 ];
 
 const getHeatmapColor = (value: number, min: number, max: number) => {
@@ -55,13 +63,40 @@ const zScoreNormalize = (values: number[][]): number[][] => {
   });
 };
 
-// Calculate Euclidean distance between two vectors
-const euclideanDistance = (a: number[], b: number[]): number => {
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) {
-    sum += Math.pow(a[i] - b[i], 2);
+// Calculate distance between two vectors based on metric
+const calculateDistance = (a: number[], b: number[], metric: DistanceMetric): number => {
+  switch (metric) {
+    case "euclidean": {
+      let sum = 0;
+      for (let i = 0; i < a.length; i++) {
+        sum += Math.pow(a[i] - b[i], 2);
+      }
+      return Math.sqrt(sum);
+    }
+    case "manhattan": {
+      let sum = 0;
+      for (let i = 0; i < a.length; i++) {
+        sum += Math.abs(a[i] - b[i]);
+      }
+      return sum;
+    }
+    case "correlation": {
+      const meanA = a.reduce((s, v) => s + v, 0) / a.length;
+      const meanB = b.reduce((s, v) => s + v, 0) / b.length;
+      let num = 0, denA = 0, denB = 0;
+      for (let i = 0; i < a.length; i++) {
+        const devA = a[i] - meanA;
+        const devB = b[i] - meanB;
+        num += devA * devB;
+        denA += devA * devA;
+        denB += devB * devB;
+      }
+      const corr = denA > 0 && denB > 0 ? num / Math.sqrt(denA * denB) : 0;
+      return 1 - corr; // Convert correlation to distance
+    }
+    default:
+      return 0;
   }
-  return Math.sqrt(sum);
 };
 
 // Hierarchical clustering implementation
@@ -72,13 +107,13 @@ interface ClusterNode {
   distance: number;
 }
 
-const calculateDistanceMatrix = (data: number[][]): number[][] => {
+const calculateDistanceMatrix = (data: number[][], metric: DistanceMetric): number[][] => {
   const n = data.length;
   const distMatrix: number[][] = Array(n).fill(null).map(() => Array(n).fill(0));
   
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const dist = euclideanDistance(data[i], data[j]);
+      const dist = calculateDistance(data[i], data[j], metric);
       distMatrix[i][j] = dist;
       distMatrix[j][i] = dist;
     }
@@ -121,13 +156,14 @@ const clusterDistance = (
 
 const hierarchicalCluster = (
   data: number[][],
-  method: ClusteringMethod
-): number[] => {
+  method: ClusteringMethod,
+  metric: DistanceMetric
+): { order: number[]; tree: DendrogramNode | null } => {
   if (method === "none" || data.length <= 1) {
-    return data.map((_, i) => i);
+    return { order: data.map((_, i) => i), tree: null };
   }
   
-  const distMatrix = calculateDistanceMatrix(data);
+  const distMatrix = calculateDistanceMatrix(data, metric);
   
   // Initialize clusters - each item is its own cluster
   let clusters: ClusterNode[] = data.map((_, i) => ({
@@ -176,7 +212,8 @@ const hierarchicalCluster = (
     return [...leftOrder, ...rightOrder];
   };
   
-  return extractOrder(clusters[0]);
+  const tree = clusters[0] as DendrogramNode;
+  return { order: extractOrder(tree), tree };
 };
 
 // Transpose matrix for column clustering
@@ -192,6 +229,8 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [sampleClusterMethod, setSampleClusterMethod] = useState<ClusteringMethod>("none");
   const [geneClusterMethod, setGeneClusterMethod] = useState<ClusteringMethod>("none");
+  const [distanceMetric, setDistanceMetric] = useState<DistanceMetric>("euclidean");
+  const [showDendrograms, setShowDendrograms] = useState(true);
 
   // Generate colors for user annotation values
   const userAnnotationColors = useMemo(() => {
@@ -203,7 +242,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     return generateSubtypeColors([...values].sort());
   }, [selectedAnnotation, userAnnotations]);
 
-  const { displayValues, minVal, maxVal, sortedSampleIndices, sortedGeneIndices, uniqueSubtypes } = useMemo(() => {
+  const { displayValues, minVal, maxVal, sortedSampleIndices, sortedGeneIndices, uniqueSubtypes, sampleDendrogram, geneDendrogram } = useMemo(() => {
     const normalizedValues = useZScore ? zScoreNormalize(data.values) : data.values;
     const allValues = normalizedValues.flat();
     const min = Math.min(...allValues);
@@ -211,9 +250,12 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     
     // Cluster or sort samples
     let sampleIndices: number[];
+    let sampleTree: DendrogramNode | null = null;
     if (sampleClusterMethod !== "none" && data.samples.length > 1) {
       const transposedData = transpose(normalizedValues);
-      sampleIndices = hierarchicalCluster(transposedData, sampleClusterMethod);
+      const result = hierarchicalCluster(transposedData, sampleClusterMethod, distanceMetric);
+      sampleIndices = result.order;
+      sampleTree = result.tree;
     } else {
       // Sort by subtype when not clustering
       sampleIndices = data.sampleSubtypes
@@ -224,8 +266,11 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     
     // Cluster or keep original gene order
     let geneIndices: number[];
+    let geneTree: DendrogramNode | null = null;
     if (geneClusterMethod !== "none" && data.genes.length > 1) {
-      geneIndices = hierarchicalCluster(normalizedValues, geneClusterMethod);
+      const result = hierarchicalCluster(normalizedValues, geneClusterMethod, distanceMetric);
+      geneIndices = result.order;
+      geneTree = result.tree;
     } else {
       geneIndices = data.genes.map((_, i) => i);
     }
@@ -238,9 +283,11 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
       maxVal: max, 
       sortedSampleIndices: sampleIndices, 
       sortedGeneIndices: geneIndices,
-      uniqueSubtypes: subtypes 
+      uniqueSubtypes: subtypes,
+      sampleDendrogram: sampleTree,
+      geneDendrogram: geneTree
     };
-  }, [data, useZScore, sampleClusterMethod, geneClusterMethod]);
+  }, [data, useZScore, sampleClusterMethod, geneClusterMethod, distanceMetric]);
 
   const cellWidth = Math.max(4, Math.min(10, 600 / data.samples.length));
   const cellHeight = 12;
@@ -344,16 +391,56 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
               </SelectContent>
             </Select>
           </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Distance:</Label>
+            <Select value={distanceMetric} onValueChange={(v) => setDistanceMetric(v as DistanceMetric)}>
+              <SelectTrigger className="h-7 w-[100px] text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border border-border">
+                {DISTANCE_METRICS.map((m) => (
+                  <SelectItem key={m.value} value={m.value} className="text-xs">{m.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch
+              id="dendrogram-toggle"
+              checked={showDendrograms}
+              onCheckedChange={setShowDendrograms}
+              className="scale-75"
+            />
+            <Label htmlFor="dendrogram-toggle" className="text-xs text-muted-foreground">
+              Dendrograms
+            </Label>
+          </div>
         </div>
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
+          {/* Sample dendrogram (horizontal, above heatmap) */}
+          {showDendrograms && sampleDendrogram && sampleClusterMethod !== "none" && (
+            <div className="flex mb-1">
+              <div style={{ width: 72 + 8 }} /> {/* Spacer for gene labels */}
+              {geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 40 }} />} {/* Spacer for gene dendrogram */}
+              <Dendrogram
+                root={sampleDendrogram}
+                width={cellWidth * data.samples.length}
+                height={40}
+                orientation="horizontal"
+                itemSize={cellWidth}
+              />
+            </div>
+          )}
+
           {/* User annotation bar (if selected) */}
           {selectedAnnotation && userAnnotations && (
             <div className="flex mb-0.5">
               <div className="mr-2 text-[8px] text-muted-foreground text-right truncate pr-1" style={{ width: 72 }}>
                 {selectedAnnotation}
               </div>
+              {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 40 }} />}
               <div className="flex">
                 {sortedSampleIndices.map((idx, i) => {
                   const sampleId = data.samples[idx];
@@ -379,6 +466,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
             <div className="mr-2 text-[8px] text-muted-foreground text-right truncate pr-1" style={{ width: 72 }}>
               NMF Subtype
             </div>
+            {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && <div style={{ width: 40 }} />}
             <div className="flex">
               {sortedSampleIndices.map((idx, i) => (
                 <div
@@ -394,7 +482,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
             </div>
           </div>
           
-          {/* Heatmap grid */}
+          {/* Heatmap grid with gene dendrogram */}
           <div className="flex">
             {/* Gene labels */}
             <div className="flex flex-col mr-2" style={{ width: 72 }}>
@@ -408,6 +496,19 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
                 </div>
               ))}
             </div>
+
+            {/* Gene dendrogram (vertical, left of heatmap) */}
+            {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && (
+              <div className="mr-1">
+                <Dendrogram
+                  root={geneDendrogram}
+                  width={40}
+                  height={cellHeight * data.genes.length}
+                  orientation="vertical"
+                  itemSize={cellHeight}
+                />
+              </div>
+            )}
             
             {/* Heatmap cells */}
             <div>
