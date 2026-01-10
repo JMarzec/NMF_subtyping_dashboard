@@ -487,42 +487,70 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
       const scrollWidth = element.scrollWidth;
       const scrollHeight = element.scrollHeight;
 
-      // Keep resolution modest; focus on text correctness
+      // Extra padding for labels
+      const paddingLeft = 20;
+      const paddingRight = 60;
+      const paddingBottom = 40;
+
       const canvas = await html2canvas(element, {
         backgroundColor: "#ffffff",
-        scale: 2,
+        scale: 3,
         logging: false,
         useCORS: true,
         allowTaint: true,
-        width: scrollWidth,
-        height: scrollHeight,
-        windowWidth: scrollWidth,
-        windowHeight: scrollHeight,
+        width: scrollWidth + paddingLeft + paddingRight,
+        height: scrollHeight + paddingBottom,
+        windowWidth: scrollWidth + paddingLeft + paddingRight,
+        windowHeight: scrollHeight + paddingBottom,
+        x: -paddingLeft,
+        y: 0,
         scrollX: 0,
         scrollY: 0,
         onclone: (clonedDoc) => {
           const clonedElement = clonedDoc.body.querySelector('[data-heatmap-export="true"]') as HTMLElement | null;
           if (!clonedElement) return;
 
-          // Force all text to web-safe fonts (html2canvas + vertical text is picky)
+          // Add left margin to the cloned element
+          clonedElement.style.marginLeft = `${paddingLeft}px`;
+          clonedElement.style.marginRight = `${paddingRight}px`;
+          clonedElement.style.paddingBottom = `${paddingBottom}px`;
+
+          // Force all text to web-safe fonts
           clonedElement.querySelectorAll('*').forEach((el) => {
             if (el instanceof HTMLElement) {
               el.style.fontFamily = 'Arial, sans-serif';
             }
           });
 
-          // Replace CSS writing-mode labels with rotate transform (renders more reliably)
+          // Fix gene labels - ensure they're fully visible with smaller font
+          clonedElement.querySelectorAll('.text-xs.text-left.truncate.text-muted-foreground').forEach((el) => {
+            if (el instanceof HTMLElement && el.closest('.flex-col')) {
+              el.style.fontSize = '9px';
+              el.style.overflow = 'visible';
+              el.style.whiteSpace = 'nowrap';
+            }
+          });
+
+          // Fix sample labels - use simpler approach
           clonedElement.querySelectorAll('[data-heatmap-sample-label="true"]').forEach((el) => {
             if (!(el instanceof HTMLElement)) return;
-            el.style.writingMode = 'horizontal-tb';
+            const span = el.querySelector('span');
+            const sampleName = span?.textContent || '';
+            
+            // Clear and rebuild as simple rotated text
+            el.style.writingMode = 'vertical-rl';
             el.style.textOrientation = 'mixed';
-            el.style.transform = 'rotate(-90deg)';
-            el.style.transformOrigin = 'left top';
-            el.style.height = `${Math.max(40, (el.clientHeight || 50))}px`;
-            el.style.width = `${Math.max(40, (el.clientWidth || 10))}px`;
+            el.style.transform = 'rotate(180deg)';
+            el.style.fontSize = '6px';
+            el.style.overflow = 'visible';
             el.style.display = 'flex';
-            el.style.alignItems = 'flex-start';
-            el.style.justifyContent = 'flex-start';
+            el.style.alignItems = 'center';
+            el.style.justifyContent = 'flex-end';
+            if (span) {
+              span.style.overflow = 'visible';
+              span.style.textOverflow = 'clip';
+              span.style.whiteSpace = 'nowrap';
+            }
           });
         },
       });
@@ -549,10 +577,15 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     const hasGeneDendro = showDendrograms && !!geneDendrogram && geneClusterMethod !== "none";
 
     const sampleDendroH = hasSampleDendro ? 40 : 0;
-    const sampleLabelH = 60;
-    const annotBarsH = (selectedAnnotation && userAnnotations ? 10 : 0) + 10; // user annot + subtype
+    const sampleLabelH = 70; // Increased for sample names
+    const annotBarsH = (selectedAnnotation && userAnnotations ? 12 : 0) + 12; // user annot + subtype with gap
 
-    const padding = { top: 20, right: 140, bottom: 120, left: 20 };
+    // Calculate user annotation legend height
+    const userAnnotEntries = selectedAnnotation ? Object.entries(userAnnotationColors) : [];
+    const hasUserAnnotLegend = userAnnotEntries.length > 0;
+    const userAnnotLegendH = hasUserAnnotLegend ? 25 : 0;
+
+    const padding = { top: 20, right: 140, bottom: 130 + userAnnotLegendH, left: 30 }; // Increased left padding
     const topBlockH = sampleDendroH + sampleLabelH + annotBarsH;
 
     const dendrogramWidth = hasGeneDendro ? 40 : 0;
@@ -572,9 +605,10 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     svg.appendChild(bg);
 
     const yDendro = padding.top;
-    const ySampleLabels = padding.top + sampleDendroH + sampleLabelH - 8;
-    const ySubtypeBar = padding.top + sampleDendroH + sampleLabelH + (selectedAnnotation && userAnnotations ? 10 : 0) + 2;
-    const yUserAnnotBar = padding.top + sampleDendroH + sampleLabelH + 2;
+    // Position sample labels to end just above annotation bars with gap
+    const ySubtypeBar = padding.top + sampleDendroH + sampleLabelH + (selectedAnnotation && userAnnotations ? 12 : 0) + 4;
+    const yUserAnnotBar = padding.top + sampleDendroH + sampleLabelH + 4;
+    const ySampleLabels = yUserAnnotBar - 4; // Sample labels end just above first annotation bar
     const yCellsStart = padding.top + topBlockH;
 
     // Sample dendrogram
@@ -593,7 +627,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
       });
     }
 
-    // Sample names (rotated)
+    // Sample names (rotated) - positioned to not overlap with annotation bars
     sortedSampleIndices.forEach((sampleIdx, i) => {
       const sampleName = filteredData.samples[sampleIdx];
       const x = padding.left + i * cellWidth + cellWidth / 2;
@@ -602,10 +636,10 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
       const text = document.createElementNS(svgNS, "text");
       text.setAttribute("x", String(x));
       text.setAttribute("y", String(y));
-      text.setAttribute("font-size", "7");
+      text.setAttribute("font-size", "6");
       text.setAttribute("font-family", "Arial, sans-serif");
       text.setAttribute("fill", "#4b5563");
-      text.setAttribute("text-anchor", "end");
+      text.setAttribute("text-anchor", "start");
       text.setAttribute("transform", `rotate(-90, ${x}, ${y})`);
       text.textContent = sampleName;
       svg.appendChild(text);
@@ -717,6 +751,19 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     // Subtype legend
     const subtypeLegendY = legendY + 35;
     let xOffset = padding.left;
+    
+    // Add "NMF Subtypes:" label
+    const subtypeLegendLabel = document.createElementNS(svgNS, "text");
+    subtypeLegendLabel.setAttribute("x", String(xOffset));
+    subtypeLegendLabel.setAttribute("y", String(subtypeLegendY + 10));
+    subtypeLegendLabel.setAttribute("font-size", "10");
+    subtypeLegendLabel.setAttribute("font-family", "Arial, sans-serif");
+    subtypeLegendLabel.setAttribute("font-weight", "500");
+    subtypeLegendLabel.setAttribute("fill", "#6b7280");
+    subtypeLegendLabel.textContent = "NMF Subtypes:";
+    svg.appendChild(subtypeLegendLabel);
+    xOffset += 80;
+
     uniqueSubtypes.forEach((subtype) => {
       const rect = document.createElementNS(svgNS, "rect");
       rect.setAttribute("x", String(xOffset));
@@ -738,6 +785,46 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
 
       xOffset += 16 + subtype.length * 6 + 20;
     });
+
+    // User annotation legend (if selected)
+    if (hasUserAnnotLegend && selectedAnnotation) {
+      const userAnnotLegendY = subtypeLegendY + 22;
+      let annotXOffset = padding.left;
+
+      // Add annotation name label
+      const annotLegendLabel = document.createElementNS(svgNS, "text");
+      annotLegendLabel.setAttribute("x", String(annotXOffset));
+      annotLegendLabel.setAttribute("y", String(userAnnotLegendY + 10));
+      annotLegendLabel.setAttribute("font-size", "10");
+      annotLegendLabel.setAttribute("font-family", "Arial, sans-serif");
+      annotLegendLabel.setAttribute("font-weight", "500");
+      annotLegendLabel.setAttribute("fill", "#6b7280");
+      annotLegendLabel.textContent = `${selectedAnnotation}:`;
+      svg.appendChild(annotLegendLabel);
+      annotXOffset += selectedAnnotation.length * 6 + 16;
+
+      userAnnotEntries.forEach(([value, color]) => {
+        const rect = document.createElementNS(svgNS, "rect");
+        rect.setAttribute("x", String(annotXOffset));
+        rect.setAttribute("y", String(userAnnotLegendY));
+        rect.setAttribute("width", "12");
+        rect.setAttribute("height", "12");
+        rect.setAttribute("rx", "2");
+        rect.setAttribute("fill", color);
+        svg.appendChild(rect);
+
+        const text = document.createElementNS(svgNS, "text");
+        text.setAttribute("x", String(annotXOffset + 16));
+        text.setAttribute("y", String(userAnnotLegendY + 10));
+        text.setAttribute("font-size", "10");
+        text.setAttribute("font-family", "Arial, sans-serif");
+        text.setAttribute("fill", "#4b5563");
+        text.textContent = value;
+        svg.appendChild(text);
+
+        annotXOffset += 16 + value.length * 6 + 20;
+      });
+    }
 
     const serializer = new XMLSerializer();
     const svgString = serializer.serializeToString(svg);
