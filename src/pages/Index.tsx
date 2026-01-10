@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { SummaryCards } from "@/components/bioinformatics/SummaryCards";
 import { SubtypeDistribution } from "@/components/bioinformatics/SubtypeDistribution";
 import { ClusterScatter } from "@/components/bioinformatics/ClusterScatter";
@@ -6,7 +6,9 @@ import { ExpressionHeatmap } from "@/components/bioinformatics/ExpressionHeatmap
 import { MarkerGenesTable } from "@/components/bioinformatics/MarkerGenesTable";
 import { CopheneticPlot } from "@/components/bioinformatics/CopheneticPlot";
 import { JsonUploader, NmfData } from "@/components/bioinformatics/JsonUploader";
+import { MatrixUploader, MatrixData, AnnotationData } from "@/components/bioinformatics/MatrixUploader";
 import { SurvivalCurve } from "@/components/bioinformatics/SurvivalCurve";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   nmfSummary as defaultSummary, 
   sampleResults as defaultSamples, 
@@ -16,7 +18,7 @@ import {
   defaultRankMetrics,
   defaultSurvivalData,
 } from "@/data/mockNmfData";
-import { Dna } from "lucide-react";
+import { Dna, FileJson, FileSpreadsheet } from "lucide-react";
 
 const Index = () => {
   const [data, setData] = useState<NmfData>({
@@ -27,15 +29,47 @@ const Index = () => {
     survivalData: defaultSurvivalData,
   });
 
+  // User-provided annotation data from matrix upload
+  const [userAnnotations, setUserAnnotations] = useState<AnnotationData | undefined>(undefined);
+  
+  // Custom matrix data (if uploaded)
+  const [customMatrix, setCustomMatrix] = useState<MatrixData | null>(null);
+
   const heatmapData = useMemo(() => {
+    // If custom matrix is uploaded, use it for heatmap
+    if (customMatrix) {
+      // Get sample subtypes from NMF data or annotation data
+      const sampleSubtypes = customMatrix.samples.map(sampleId => {
+        const nmfSample = data.samples.find(s => s.sample_id === sampleId);
+        if (nmfSample) return nmfSample.subtype;
+        // If no NMF subtype, use first annotation column or "Unknown"
+        if (userAnnotations?.annotations[sampleId]) {
+          const firstCol = userAnnotations.columns[0];
+          return userAnnotations.annotations[sampleId][firstCol] || "Unknown";
+        }
+        return "Unknown";
+      });
+
+      return {
+        genes: customMatrix.genes.slice(0, 50), // Limit for display
+        samples: customMatrix.samples,
+        sampleSubtypes,
+        values: customMatrix.values.slice(0, 50),
+      };
+    }
     return data.heatmapData || generateHeatmapData();
-  }, [data.heatmapData]);
+  }, [data.heatmapData, data.samples, customMatrix, userAnnotations]);
 
   // Generate colors dynamically from subtype names in data
   const subtypeColors = useMemo(() => {
     const subtypes = Object.keys(data.summary.subtype_counts);
     return generateSubtypeColors(subtypes);
   }, [data.summary.subtype_counts]);
+
+  const handleMatrixLoaded = useCallback((matrix: MatrixData, annotation?: AnnotationData) => {
+    setCustomMatrix(matrix);
+    setUserAnnotations(annotation);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -58,7 +92,26 @@ const Index = () => {
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* Upload Section */}
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <JsonUploader onDataLoaded={setData} />
+          <div className="lg:col-span-1">
+            <Tabs defaultValue="nmf" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="nmf" className="text-xs">
+                  <FileJson className="h-3 w-3 mr-1" />
+                  NMF JSON
+                </TabsTrigger>
+                <TabsTrigger value="matrix" className="text-xs">
+                  <FileSpreadsheet className="h-3 w-3 mr-1" />
+                  Matrix
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="nmf" className="mt-2">
+                <JsonUploader onDataLoaded={setData} />
+              </TabsContent>
+              <TabsContent value="matrix" className="mt-2">
+                <MatrixUploader onMatrixLoaded={handleMatrixLoaded} />
+              </TabsContent>
+            </Tabs>
+          </div>
           <div className="lg:col-span-3">
             <SummaryCards summary={data.summary} />
           </div>
@@ -67,13 +120,21 @@ const Index = () => {
         {/* Charts Row 1 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} subtypeColors={subtypeColors} />
-          <ClusterScatter samples={data.samples} subtypeColors={subtypeColors} />
+          <ClusterScatter 
+            samples={data.samples} 
+            subtypeColors={subtypeColors} 
+            userAnnotations={userAnnotations}
+          />
         </div>
 
         {/* Charts Row 2 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <ExpressionHeatmap data={heatmapData} subtypeColors={subtypeColors} />
+            <ExpressionHeatmap 
+              data={heatmapData} 
+              subtypeColors={subtypeColors} 
+              userAnnotations={userAnnotations}
+            />
           </div>
           <CopheneticPlot 
             rankMetrics={data.rankMetrics} 

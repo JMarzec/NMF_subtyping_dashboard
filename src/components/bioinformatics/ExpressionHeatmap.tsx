@@ -4,6 +4,8 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useMemo, useState } from "react";
 import { Download } from "lucide-react";
+import { AnnotationSelector } from "./AnnotationSelector";
+import { generateSubtypeColors } from "@/data/mockNmfData";
 
 interface HeatmapData {
   genes: string[];
@@ -12,9 +14,15 @@ interface HeatmapData {
   values: number[][];
 }
 
+interface AnnotationData {
+  annotations: Record<string, Record<string, string>>;
+  columns: string[];
+}
+
 interface ExpressionHeatmapProps {
   data: HeatmapData;
   subtypeColors: Record<string, string>;
+  userAnnotations?: AnnotationData;
 }
 
 const getHeatmapColor = (value: number, min: number, max: number) => {
@@ -39,10 +47,21 @@ const zScoreNormalize = (values: number[][]): number[][] => {
   });
 };
 
-export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProps) => {
-  const [hoveredCell, setHoveredCell] = useState<{ gene: string; sample: string; value: number; subtype: string } | null>(null);
+export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: ExpressionHeatmapProps) => {
+  const [hoveredCell, setHoveredCell] = useState<{ gene: string; sample: string; value: number; subtype: string; userAnnotation?: string } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [useZScore, setUseZScore] = useState(true);
+  const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
+
+  // Generate colors for user annotation values
+  const userAnnotationColors = useMemo(() => {
+    if (!selectedAnnotation || !userAnnotations) return {};
+    const values = new Set<string>();
+    Object.values(userAnnotations.annotations).forEach(annot => {
+      if (annot[selectedAnnotation]) values.add(annot[selectedAnnotation]);
+    });
+    return generateSubtypeColors([...values].sort());
+  }, [selectedAnnotation, userAnnotations]);
 
   const { displayValues, minVal, maxVal, sortedIndices, uniqueSubtypes } = useMemo(() => {
     const normalizedValues = useZScore ? zScoreNormalize(data.values) : data.values;
@@ -71,11 +90,16 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
   ) => {
     const rect = e.currentTarget.getBoundingClientRect();
     setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top - 10 });
+    const sampleId = data.samples[sampleIdx];
+    const userAnnotValue = selectedAnnotation && userAnnotations?.annotations[sampleId]
+      ? userAnnotations.annotations[sampleId][selectedAnnotation]
+      : undefined;
     setHoveredCell({
       gene: data.genes[geneIdx],
-      sample: data.samples[sampleIdx],
+      sample: sampleId,
       value: displayValues[geneIdx][sampleIdx],
       subtype: data.sampleSubtypes[sampleIdx],
+      userAnnotation: userAnnotValue,
     });
   };
 
@@ -102,9 +126,16 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm relative">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
         <CardTitle className="text-lg">Expression Heatmap (Top Marker Genes)</CardTitle>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          {userAnnotations && userAnnotations.columns.length > 0 && (
+            <AnnotationSelector
+              columns={userAnnotations.columns}
+              selectedColumn={selectedAnnotation}
+              onColumnChange={setSelectedAnnotation}
+            />
+          )}
           <div className="flex items-center gap-2">
             <Switch
               id="zscore-toggle"
@@ -123,19 +154,50 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
       </CardHeader>
       <CardContent>
         <div className="overflow-x-auto">
+          {/* User annotation bar (if selected) */}
+          {selectedAnnotation && userAnnotations && (
+            <div className="flex mb-0.5">
+              <div className="mr-2 text-[8px] text-muted-foreground text-right truncate pr-1" style={{ width: 72 }}>
+                {selectedAnnotation}
+              </div>
+              <div className="flex">
+                {sortedIndices.map((idx, i) => {
+                  const sampleId = data.samples[idx];
+                  const value = userAnnotations.annotations[sampleId]?.[selectedAnnotation] || "";
+                  return (
+                    <div
+                      key={`annot-${i}`}
+                      style={{
+                        width: cellWidth,
+                        height: 8,
+                        backgroundColor: userAnnotationColors[value] || "hsl(var(--muted))",
+                      }}
+                      title={`${selectedAnnotation}: ${value}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          
           {/* Subtype annotation bar */}
-          <div className="flex mb-1 ml-20">
-            {sortedIndices.map((idx, i) => (
-              <div
-                key={i}
-                style={{
-                  width: cellWidth,
-                  height: 8,
-                  backgroundColor: subtypeColors[data.sampleSubtypes[idx]] || "hsl(var(--primary))",
-                }}
-                title={`${data.samples[idx]} - ${data.sampleSubtypes[idx]}`}
-              />
-            ))}
+          <div className="flex mb-1">
+            <div className="mr-2 text-[8px] text-muted-foreground text-right truncate pr-1" style={{ width: 72 }}>
+              NMF Subtype
+            </div>
+            <div className="flex">
+              {sortedIndices.map((idx, i) => (
+                <div
+                  key={i}
+                  style={{
+                    width: cellWidth,
+                    height: 8,
+                    backgroundColor: subtypeColors[data.sampleSubtypes[idx]] || "hsl(var(--primary))",
+                  }}
+                  title={`${data.samples[idx]} - ${data.sampleSubtypes[idx]}`}
+                />
+              ))}
+            </div>
           </div>
           
           {/* Heatmap grid */}
@@ -194,6 +256,7 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
           
           {/* Subtype legend */}
           <div className="flex flex-wrap gap-4 mt-3 justify-center">
+            <span className="text-xs text-muted-foreground font-medium">NMF Subtypes:</span>
             {uniqueSubtypes.map((subtype) => (
               <div key={subtype} className="flex items-center gap-2">
                 <div 
@@ -204,6 +267,22 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
               </div>
             ))}
           </div>
+
+          {/* User annotation legend */}
+          {selectedAnnotation && Object.keys(userAnnotationColors).length > 0 && (
+            <div className="flex flex-wrap gap-4 mt-2 justify-center border-t border-border/50 pt-2">
+              <span className="text-xs text-muted-foreground font-medium">{selectedAnnotation}:</span>
+              {Object.entries(userAnnotationColors).map(([value, color]) => (
+                <div key={value} className="flex items-center gap-2">
+                  <div 
+                    className="w-3 h-3 rounded" 
+                    style={{ backgroundColor: color }} 
+                  />
+                  <span className="text-xs text-muted-foreground">{value}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Tooltip */}
@@ -219,6 +298,9 @@ export const ExpressionHeatmap = ({ data, subtypeColors }: ExpressionHeatmapProp
             <p className="text-sm font-medium">{hoveredCell.sample}</p>
             <p className="text-xs text-muted-foreground">Gene: {hoveredCell.gene}</p>
             <p className="text-xs text-muted-foreground">Subtype: {hoveredCell.subtype}</p>
+            {hoveredCell.userAnnotation && selectedAnnotation && (
+              <p className="text-xs text-muted-foreground">{selectedAnnotation}: {hoveredCell.userAnnotation}</p>
+            )}
             <p className="text-xs text-muted-foreground">
               {useZScore ? "Z-score" : "Expression"}: {hoveredCell.value.toFixed(2)}
             </p>
