@@ -7,6 +7,8 @@ import { Download } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
 import { downloadChartAsPNG } from "@/lib/chartExport";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 interface HeatmapData {
   genes: string[];
@@ -15,6 +17,8 @@ interface HeatmapData {
   values: number[][];
 }
 
+type PCADataSource = "expression" | "nmf";
+
 interface PCAScatterProps {
   samples: SampleResult[];
   subtypeColors: Record<string, string>;
@@ -22,9 +26,83 @@ interface PCAScatterProps {
   heatmapData: HeatmapData;
 }
 
+// PCA on NMF scores
+const computePCAFromNMF = (samples: { scores: number[] }[]): { 
+  pc1: number[]; pc2: number[]; variance1: number; variance2: number 
+} => {
+  if (samples.length === 0) return { pc1: [], pc2: [], variance1: 0, variance2: 0 };
+  
+  const numScores = samples[0].scores.length;
+  const data = samples.map(s => s.scores);
+  
+  // Center the data
+  const means = Array(numScores).fill(0);
+  for (const row of data) {
+    for (let j = 0; j < numScores; j++) {
+      means[j] += row[j];
+    }
+  }
+  for (let j = 0; j < numScores; j++) {
+    means[j] /= data.length;
+  }
+  const centered = data.map(row => row.map((v, j) => v - means[j]));
+  
+  // Compute covariance
+  const cov: number[][] = Array(numScores).fill(null).map(() => Array(numScores).fill(0));
+  for (let i = 0; i < numScores; i++) {
+    for (let j = i; j < numScores; j++) {
+      let sum = 0;
+      for (const row of centered) {
+        sum += row[i] * row[j];
+      }
+      cov[i][j] = sum / (data.length - 1);
+      cov[j][i] = cov[i][j];
+    }
+  }
+  
+  let totalVariance = 0;
+  for (let i = 0; i < numScores; i++) totalVariance += cov[i][i];
+  
+  // Power iteration
+  const powerIteration = (matrix: number[][]): { vector: number[]; eigenvalue: number } => {
+    const size = matrix.length;
+    let vector = Array(size).fill(0).map(() => Math.random());
+    let norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
+    vector = vector.map(v => v / norm);
+    let ev = 0;
+    for (let iter = 0; iter < 100; iter++) {
+      const newVector = Array(size).fill(0);
+      for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+          newVector[i] += matrix[i][j] * vector[j];
+        }
+      }
+      ev = newVector.reduce((sum, v, i) => sum + v * vector[i], 0);
+      norm = Math.sqrt(newVector.reduce((sum, v) => sum + v * v, 0));
+      if (norm < 1e-10) break;
+      vector = newVector.map(v => v / norm);
+    }
+    return { vector, eigenvalue: ev };
+  };
+  
+  const { vector: pc1Vec, eigenvalue: e1 } = powerIteration(cov);
+  const pc1 = centered.map(row => row.reduce((sum, v, j) => sum + v * pc1Vec[j], 0));
+  
+  const deflated = cov.map((row, i) => row.map((v, j) => v - e1 * pc1Vec[i] * pc1Vec[j]));
+  const { vector: pc2Vec, eigenvalue: e2 } = powerIteration(deflated);
+  const pc2 = centered.map(row => row.reduce((sum, v, j) => sum + v * pc2Vec[j], 0));
+  
+  return {
+    pc1,
+    pc2,
+    variance1: totalVariance > 0 ? (e1 / totalVariance) * 100 : 0,
+    variance2: totalVariance > 0 ? (e2 / totalVariance) * 100 : 0,
+  };
+};
+
 // PCA implementation using power iteration for top 2 components on gene expression data
 // Takes gene expression matrix (genes x samples) and returns PC scores and variance explained
-const computePCA = (values: number[][], nGenes: number, nSamples: number): { 
+const computePCAFromExpression = (values: number[][], nGenes: number, nSamples: number): {
   pc1: number[]; 
   pc2: number[]; 
   variance1: number; 
@@ -195,6 +273,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
   const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
+  const [dataSource, setDataSource] = useState<PCADataSource>("expression");
   const chartRef = useRef<HTMLDivElement>(null);
 
   // Generate colors for user annotation values
@@ -237,24 +316,48 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
     });
   }, [samples, excludedSubtypes, excludedAnnotationValues, selectedAnnotation, userAnnotations, sampleIndexMap]);
 
-  // Compute PCA from gene expression data (same as scree plot)
+  // Compute PCA from selected data source
   const { scatterData, uniqueSubtypes, uniqueAnnotationValues, variancePC1, variancePC2 } = useMemo(() => {
     const subtypes = [...new Set(samples.map(s => s.subtype))].sort();
 
-    // Get filtered sample indices
-    const filteredIndices = filteredSamples.map(s => sampleIndexMap.get(s.sample_id)!);
-    
-    // Extract expression data for filtered samples only
-    const nGenes = heatmapData.genes.length;
-    const nFilteredSamples = filteredIndices.length;
-    
-    // Create filtered expression matrix
-    const filteredValues: number[][] = heatmapData.values.map(geneRow => 
-      filteredIndices.map(idx => geneRow[idx])
-    );
+    let pc1: number[];
+    let pc2: number[];
+    let variance1: number;
+    let variance2: number;
 
-    // Compute PCA on gene expression data
-    const { pc1, pc2, variance1, variance2 } = computePCA(filteredValues, nGenes, nFilteredSamples);
+    if (dataSource === "expression") {
+      // Get filtered sample indices
+      const filteredIndices = filteredSamples.map(s => sampleIndexMap.get(s.sample_id)!);
+      
+      // Extract expression data for filtered samples only
+      const nGenes = heatmapData.genes.length;
+      const nFilteredSamples = filteredIndices.length;
+      
+      // Create filtered expression matrix
+      const filteredValues: number[][] = heatmapData.values.map(geneRow => 
+        filteredIndices.map(idx => geneRow[idx])
+      );
+
+      // Compute PCA on gene expression data
+      const result = computePCAFromExpression(filteredValues, nGenes, nFilteredSamples);
+      pc1 = result.pc1;
+      pc2 = result.pc2;
+      variance1 = result.variance1;
+      variance2 = result.variance2;
+    } else {
+      // Compute PCA on NMF scores
+      const nmfData = filteredSamples.map(s => ({
+        scores: Object.keys(s)
+          .filter(k => k.startsWith("score_"))
+          .sort()
+          .map(k => (s as any)[k] as number)
+      }));
+      const result = computePCAFromNMF(nmfData);
+      pc1 = result.pc1;
+      pc2 = result.pc2;
+      variance1 = result.variance1;
+      variance2 = result.variance2;
+    }
 
     const data = filteredSamples.map((sample, idx) => {
       const userAnnotValue = selectedAnnotation && userAnnotations?.annotations[sample.sample_id]
@@ -274,7 +377,6 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
     const annotValues = selectedAnnotation
       ? [...new Set(samples.map(s => userAnnotations?.annotations[s.sample_id]?.[selectedAnnotation]).filter(Boolean))].sort()
       : [];
-
     return { 
       scatterData: data, 
       uniqueSubtypes: subtypes, 
@@ -282,7 +384,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
       variancePC1: variance1,
       variancePC2: variance2
     };
-  }, [filteredSamples, selectedAnnotation, userAnnotations, samples, heatmapData, sampleIndexMap]);
+  }, [filteredSamples, selectedAnnotation, userAnnotations, samples, heatmapData, sampleIndexMap, dataSource]);
 
   const toggleSubtype = (subtype: string) => {
     setExcludedSubtypes(prev => {
@@ -350,7 +452,16 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
         <CardTitle className="text-lg">Sample Clustering (PCA)</CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground">NMF Scores</Label>
+            <Switch
+              checked={dataSource === "expression"}
+              onCheckedChange={(checked) => setDataSource(checked ? "expression" : "nmf")}
+              className="scale-75"
+            />
+            <Label className="text-xs text-muted-foreground">Expression</Label>
+          </div>
           {userAnnotations && userAnnotations.columns.length > 0 && (
             <AnnotationSelector
               columns={userAnnotations.columns}

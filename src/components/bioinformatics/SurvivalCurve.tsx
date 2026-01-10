@@ -1,6 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { Download } from "lucide-react";
+import { downloadChartAsPNG } from "@/lib/chartExport";
 
 export interface SurvivalData {
   subtype: string;
@@ -13,6 +16,11 @@ interface SurvivalCurveProps {
 }
 
 export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  const handleDownload = () => {
+    downloadChartAsPNG(chartRef.current, "survival-curve");
+  };
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
     
@@ -53,11 +61,15 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-lg">Kaplan-Meier Survival Curves</CardTitle>
+        <Button variant="outline" size="sm" onClick={handleDownload}>
+          <Download className="h-4 w-4 mr-1" />
+          PNG
+        </Button>
       </CardHeader>
       <CardContent>
-        <div className="h-[280px]">
+        <div ref={chartRef} className="h-[280px] bg-card">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 20 }}>
               <XAxis

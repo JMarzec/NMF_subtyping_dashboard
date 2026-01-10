@@ -396,10 +396,12 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations }: Expr
     try {
       const canvas = await html2canvas(heatmapRef.current, {
         backgroundColor: "#ffffff",
-        scale: 2,
+        scale: 4, // Higher resolution for readability
         logging: false,
-        height: heatmapRef.current.scrollHeight + 60, // Extra padding for legend
-        windowHeight: heatmapRef.current.scrollHeight + 60,
+        width: heatmapRef.current.scrollWidth + 120, // Extra padding for gene labels/dendrogram on right
+        height: heatmapRef.current.scrollHeight + 80, // Extra padding for legends at bottom
+        windowWidth: heatmapRef.current.scrollWidth + 120,
+        windowHeight: heatmapRef.current.scrollHeight + 80,
       });
       const link = document.createElement("a");
       link.download = "expression-heatmap.png";
