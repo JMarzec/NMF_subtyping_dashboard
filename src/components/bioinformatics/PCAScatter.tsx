@@ -12,8 +12,9 @@ interface PCAScatterProps {
 }
 
 // Simple PCA implementation using power iteration for top 2 components
-const computePCA = (data: number[][]): { pc1: number[]; pc2: number[] } => {
-  if (data.length === 0) return { pc1: [], pc2: [] };
+// Returns scores and variance explained
+const computePCA = (data: number[][]): { pc1: number[]; pc2: number[]; variance1: number; variance2: number } => {
+  if (data.length === 0) return { pc1: [], pc2: [], variance1: 0, variance2: 0 };
 
   const n = data.length;
   const m = data[0].length;
@@ -44,14 +45,21 @@ const computePCA = (data: number[][]): { pc1: number[]; pc2: number[] } => {
     }
   }
 
+  // Calculate total variance (trace of covariance matrix)
+  let totalVariance = 0;
+  for (let i = 0; i < m; i++) {
+    totalVariance += cov[i][i];
+  }
+
   // Power iteration for top eigenvector
-  const powerIteration = (matrix: number[][], deflated = false, prevVector?: number[]): number[] => {
+  const powerIteration = (matrix: number[][]): { vector: number[]; eigenvalue: number } => {
     let vector = Array(m).fill(0).map(() => Math.random());
     
     // Normalize
     let norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
     vector = vector.map(v => v / norm);
 
+    let eigenvalue = 0;
     for (let iter = 0; iter < 100; iter++) {
       // Multiply by matrix
       const newVector = Array(m).fill(0);
@@ -61,34 +69,40 @@ const computePCA = (data: number[][]): { pc1: number[]; pc2: number[] } => {
         }
       }
 
+      // Calculate eigenvalue (Rayleigh quotient)
+      eigenvalue = newVector.reduce((sum, v, i) => sum + v * vector[i], 0);
+
       // Normalize
       norm = Math.sqrt(newVector.reduce((sum, v) => sum + v * v, 0));
       if (norm < 1e-10) break;
       vector = newVector.map(v => v / norm);
     }
 
-    return vector;
+    return { vector, eigenvalue };
   };
 
   // Get first principal component
-  const pc1Vector = powerIteration(cov);
+  const { vector: pc1Vector, eigenvalue: eigenvalue1 } = powerIteration(cov);
   const pc1Scores = centered.map(row => 
     row.reduce((sum, v, j) => sum + v * pc1Vector[j], 0)
   );
 
   // Deflate covariance matrix
-  const eigenvalue1 = pc1Scores.reduce((sum, v) => sum + v * v, 0) / (n - 1);
   const deflatedCov = cov.map((row, i) =>
     row.map((v, j) => v - eigenvalue1 * pc1Vector[i] * pc1Vector[j])
   );
 
   // Get second principal component
-  const pc2Vector = powerIteration(deflatedCov, true, pc1Vector);
+  const { vector: pc2Vector, eigenvalue: eigenvalue2 } = powerIteration(deflatedCov);
   const pc2Scores = centered.map(row =>
     row.reduce((sum, v, j) => sum + v * pc2Vector[j], 0)
   );
 
-  return { pc1: pc1Scores, pc2: pc2Scores };
+  // Calculate variance explained (as percentage)
+  const variance1 = totalVariance > 0 ? (eigenvalue1 / totalVariance) * 100 : 0;
+  const variance2 = totalVariance > 0 ? (eigenvalue2 / totalVariance) * 100 : 0;
+
+  return { pc1: pc1Scores, pc2: pc2Scores, variance1, variance2 };
 };
 
 export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatterProps) => {
@@ -105,7 +119,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
   }, [selectedAnnotation, userAnnotations]);
 
   // Compute PCA from sample scores
-  const { scatterData, uniqueSubtypes, uniqueAnnotationValues } = useMemo(() => {
+  const { scatterData, uniqueSubtypes, uniqueAnnotationValues, variancePC1, variancePC2 } = useMemo(() => {
     const subtypes = [...new Set(samples.map(s => s.subtype))].sort();
 
     // Extract score matrix from samples (all score_subtype_* columns)
@@ -120,7 +134,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
     });
 
     // Compute PCA
-    const { pc1, pc2 } = computePCA(scoreMatrix);
+    const { pc1, pc2, variance1, variance2 } = computePCA(scoreMatrix);
 
     const data = samples.map((sample, idx) => {
       const userAnnotValue = selectedAnnotation && userAnnotations?.annotations[sample.sample_id]
@@ -141,7 +155,13 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
       ? [...new Set(data.map(d => d.userAnnotation).filter(Boolean))].sort()
       : [];
 
-    return { scatterData: data, uniqueSubtypes: subtypes, uniqueAnnotationValues: annotValues };
+    return { 
+      scatterData: data, 
+      uniqueSubtypes: subtypes, 
+      uniqueAnnotationValues: annotValues,
+      variancePC1: variance1,
+      variancePC2: variance2
+    };
   }, [samples, selectedAnnotation, userAnnotations]);
 
   const getPointColor = (entry: typeof scatterData[0]) => {
@@ -186,7 +206,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
       <CardContent>
         <div className="h-[280px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
+            <ScatterChart margin={{ top: 10, right: 10, bottom: 30, left: 20 }}>
               <XAxis
                 type="number"
                 dataKey="x"
@@ -194,7 +214,13 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
                 tick={{ fontSize: 10 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
-                label={{ value: "PC1", position: "bottom", offset: 0, fontSize: 10 }}
+                label={{ 
+                  value: `PC1 (${variancePC1.toFixed(1)}%)`, 
+                  position: "bottom", 
+                  offset: 10, 
+                  fontSize: 11,
+                  fill: "hsl(var(--muted-foreground))"
+                }}
               />
               <YAxis
                 type="number"
@@ -203,7 +229,14 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
                 tick={{ fontSize: 10 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
-                label={{ value: "PC2", angle: -90, position: "insideLeft", offset: 10, fontSize: 10 }}
+                label={{ 
+                  value: `PC2 (${variancePC2.toFixed(1)}%)`, 
+                  angle: -90, 
+                  position: "insideLeft", 
+                  offset: 0, 
+                  fontSize: 11,
+                  fill: "hsl(var(--muted-foreground))"
+                }}
               />
               <ZAxis type="number" dataKey="z" range={[30, 60]} />
               <Tooltip content={<CustomTooltip />} />
