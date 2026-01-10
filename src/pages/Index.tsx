@@ -97,6 +97,7 @@ const Index = () => {
               samples={data.samples} 
               subtypeColors={subtypeColors} 
               userAnnotations={userAnnotations}
+              heatmapData={heatmapData}
             />
             <PCAScreePlot heatmapData={heatmapData} />
           </div>

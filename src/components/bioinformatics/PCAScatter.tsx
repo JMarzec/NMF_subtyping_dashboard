@@ -8,19 +8,42 @@ import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
 import { downloadChartAsPNG } from "@/lib/chartExport";
 
+interface HeatmapData {
+  genes: string[];
+  samples: string[];
+  sampleSubtypes: string[];
+  values: number[][];
+}
+
 interface PCAScatterProps {
   samples: SampleResult[];
   subtypeColors: Record<string, string>;
   userAnnotations?: AnnotationData;
+  heatmapData: HeatmapData;
 }
 
-// Simple PCA implementation using power iteration for top 2 components
-// Returns scores and variance explained
-const computePCA = (data: number[][]): { pc1: number[]; pc2: number[]; variance1: number; variance2: number } => {
-  if (data.length === 0) return { pc1: [], pc2: [], variance1: 0, variance2: 0 };
+// PCA implementation using power iteration for top 2 components on gene expression data
+// Takes gene expression matrix (genes x samples) and returns PC scores and variance explained
+const computePCA = (values: number[][], nGenes: number, nSamples: number): { 
+  pc1: number[]; 
+  pc2: number[]; 
+  variance1: number; 
+  variance2: number 
+} => {
+  if (nSamples === 0 || nGenes === 0) return { pc1: [], pc2: [], variance1: 0, variance2: 0 };
 
-  const n = data.length;
-  const m = data[0].length;
+  // Transpose to get samples as rows (samples x genes)
+  const data: number[][] = [];
+  for (let s = 0; s < nSamples; s++) {
+    const row: number[] = [];
+    for (let g = 0; g < nGenes; g++) {
+      row.push(values[g][s]);
+    }
+    data.push(row);
+  }
+
+  const n = data.length; // samples
+  const m = data[0].length; // genes
 
   // Center the data
   const means = Array(m).fill(0);
@@ -35,80 +58,140 @@ const computePCA = (data: number[][]): { pc1: number[]; pc2: number[]; variance1
 
   const centered = data.map(row => row.map((v, j) => v - means[j]));
 
-  // Compute covariance matrix
-  const cov: number[][] = Array(m).fill(null).map(() => Array(m).fill(0));
-  for (let i = 0; i < m; i++) {
-    for (let j = i; j < m; j++) {
-      let sum = 0;
-      for (let k = 0; k < n; k++) {
-        sum += centered[k][i] * centered[k][j];
-      }
-      cov[i][j] = sum / (n - 1);
-      cov[j][i] = cov[i][j];
-    }
-  }
-
-  // Calculate total variance (trace of covariance matrix)
+  // Use Gram matrix (n x n) for efficiency when n < m
+  const useGram = n < m;
+  
   let totalVariance = 0;
-  for (let i = 0; i < m; i++) {
-    totalVariance += cov[i][i];
-  }
+  let eigenvalue1 = 0;
+  let eigenvalue2 = 0;
+  let pc1Scores: number[] = [];
+  let pc2Scores: number[] = [];
 
-  // Power iteration for top eigenvector
-  const powerIteration = (matrix: number[][]): { vector: number[]; eigenvalue: number } => {
-    let vector = Array(m).fill(0).map(() => Math.random());
-    
-    // Normalize
-    let norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
-    vector = vector.map(v => v / norm);
-
-    let eigenvalue = 0;
-    for (let iter = 0; iter < 100; iter++) {
-      // Multiply by matrix
-      const newVector = Array(m).fill(0);
-      for (let i = 0; i < m; i++) {
-        for (let j = 0; j < m; j++) {
-          newVector[i] += matrix[i][j] * vector[j];
+  if (useGram) {
+    // Compute Gram matrix (n x n): X X^T / (n-1)
+    const gram: number[][] = Array(n).fill(null).map(() => Array(n).fill(0));
+    for (let i = 0; i < n; i++) {
+      for (let j = i; j < n; j++) {
+        let sum = 0;
+        for (let k = 0; k < m; k++) {
+          sum += centered[i][k] * centered[j][k];
         }
+        gram[i][j] = sum / (n - 1);
+        gram[j][i] = gram[i][j];
       }
-
-      // Calculate eigenvalue (Rayleigh quotient)
-      eigenvalue = newVector.reduce((sum, v, i) => sum + v * vector[i], 0);
-
-      // Normalize
-      norm = Math.sqrt(newVector.reduce((sum, v) => sum + v * v, 0));
-      if (norm < 1e-10) break;
-      vector = newVector.map(v => v / norm);
     }
 
-    return { vector, eigenvalue };
-  };
+    // Total variance from trace
+    for (let i = 0; i < n; i++) {
+      totalVariance += gram[i][i];
+    }
 
-  // Get first principal component
-  const { vector: pc1Vector, eigenvalue: eigenvalue1 } = powerIteration(cov);
-  const pc1Scores = centered.map(row => 
-    row.reduce((sum, v, j) => sum + v * pc1Vector[j], 0)
-  );
+    // Power iteration for first eigenvector
+    const powerIteration = (matrix: number[][]): { vector: number[]; eigenvalue: number } => {
+      const size = matrix.length;
+      let vector = Array(size).fill(0).map(() => Math.random());
+      let norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
+      vector = vector.map(v => v / norm);
 
-  // Deflate covariance matrix
-  const deflatedCov = cov.map((row, i) =>
-    row.map((v, j) => v - eigenvalue1 * pc1Vector[i] * pc1Vector[j])
-  );
+      let ev = 0;
+      for (let iter = 0; iter < 100; iter++) {
+        const newVector = Array(size).fill(0);
+        for (let i = 0; i < size; i++) {
+          for (let j = 0; j < size; j++) {
+            newVector[i] += matrix[i][j] * vector[j];
+          }
+        }
+        ev = newVector.reduce((sum, v, i) => sum + v * vector[i], 0);
+        norm = Math.sqrt(newVector.reduce((sum, v) => sum + v * v, 0));
+        if (norm < 1e-10) break;
+        vector = newVector.map(v => v / norm);
+      }
+      return { vector, eigenvalue: ev };
+    };
 
-  // Get second principal component
-  const { vector: pc2Vector, eigenvalue: eigenvalue2 } = powerIteration(deflatedCov);
-  const pc2Scores = centered.map(row =>
-    row.reduce((sum, v, j) => sum + v * pc2Vector[j], 0)
-  );
+    // First PC
+    const { vector: v1, eigenvalue: e1 } = powerIteration(gram);
+    eigenvalue1 = e1;
+    pc1Scores = v1.map(v => v * Math.sqrt(Math.abs(e1) * (n - 1)));
 
-  // Calculate variance explained (as percentage)
+    // Deflate
+    const deflated = gram.map((row, i) =>
+      row.map((v, j) => v - e1 * v1[i] * v1[j])
+    );
+
+    // Second PC
+    const { vector: v2, eigenvalue: e2 } = powerIteration(deflated);
+    eigenvalue2 = e2;
+    pc2Scores = v2.map(v => v * Math.sqrt(Math.abs(e2) * (n - 1)));
+  } else {
+    // Compute covariance matrix (m x m)
+    const cov: number[][] = Array(m).fill(null).map(() => Array(m).fill(0));
+    for (let i = 0; i < m; i++) {
+      for (let j = i; j < m; j++) {
+        let sum = 0;
+        for (let k = 0; k < n; k++) {
+          sum += centered[k][i] * centered[k][j];
+        }
+        cov[i][j] = sum / (n - 1);
+        cov[j][i] = cov[i][j];
+      }
+    }
+
+    // Total variance
+    for (let i = 0; i < m; i++) {
+      totalVariance += cov[i][i];
+    }
+
+    // Power iteration
+    const powerIteration = (matrix: number[][]): { vector: number[]; eigenvalue: number } => {
+      const size = matrix.length;
+      let vector = Array(size).fill(0).map(() => Math.random());
+      let norm = Math.sqrt(vector.reduce((sum, v) => sum + v * v, 0));
+      vector = vector.map(v => v / norm);
+
+      let ev = 0;
+      for (let iter = 0; iter < 100; iter++) {
+        const newVector = Array(size).fill(0);
+        for (let i = 0; i < size; i++) {
+          for (let j = 0; j < size; j++) {
+            newVector[i] += matrix[i][j] * vector[j];
+          }
+        }
+        ev = newVector.reduce((sum, v, i) => sum + v * vector[i], 0);
+        norm = Math.sqrt(newVector.reduce((sum, v) => sum + v * v, 0));
+        if (norm < 1e-10) break;
+        vector = newVector.map(v => v / norm);
+      }
+      return { vector, eigenvalue: ev };
+    };
+
+    // First PC
+    const { vector: pc1Vec, eigenvalue: e1 } = powerIteration(cov);
+    eigenvalue1 = e1;
+    pc1Scores = centered.map(row =>
+      row.reduce((sum, v, j) => sum + v * pc1Vec[j], 0)
+    );
+
+    // Deflate
+    const deflated = cov.map((row, i) =>
+      row.map((v, j) => v - e1 * pc1Vec[i] * pc1Vec[j])
+    );
+
+    // Second PC
+    const { vector: pc2Vec, eigenvalue: e2 } = powerIteration(deflated);
+    eigenvalue2 = e2;
+    pc2Scores = centered.map(row =>
+      row.reduce((sum, v, j) => sum + v * pc2Vec[j], 0)
+    );
+  }
+
   const variance1 = totalVariance > 0 ? (eigenvalue1 / totalVariance) * 100 : 0;
   const variance2 = totalVariance > 0 ? (eigenvalue2 / totalVariance) * 100 : 0;
 
   return { pc1: pc1Scores, pc2: pc2Scores, variance1, variance2 };
 };
 
-export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatterProps) => {
+export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapData }: PCAScatterProps) => {
   const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
   const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
   const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
@@ -124,9 +207,21 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
     return generateSubtypeColors([...values].sort());
   }, [selectedAnnotation, userAnnotations]);
 
+  // Build sample index map for heatmap data
+  const sampleIndexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    heatmapData.samples.forEach((sampleId, idx) => {
+      map.set(sampleId, idx);
+    });
+    return map;
+  }, [heatmapData.samples]);
+
   // Filter samples based on excluded subtypes or annotation values
   const filteredSamples = useMemo(() => {
     return samples.filter(s => {
+      // Ensure sample exists in heatmap data
+      if (!sampleIndexMap.has(s.sample_id)) return false;
+      
       // If coloring by annotation, filter by annotation values
       if (selectedAnnotation && userAnnotations) {
         const annotValue = userAnnotations.annotations[s.sample_id]?.[selectedAnnotation];
@@ -140,25 +235,26 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
       }
       return true;
     });
-  }, [samples, excludedSubtypes, excludedAnnotationValues, selectedAnnotation, userAnnotations]);
+  }, [samples, excludedSubtypes, excludedAnnotationValues, selectedAnnotation, userAnnotations, sampleIndexMap]);
 
-  // Compute PCA from sample scores
+  // Compute PCA from gene expression data (same as scree plot)
   const { scatterData, uniqueSubtypes, uniqueAnnotationValues, variancePC1, variancePC2 } = useMemo(() => {
     const subtypes = [...new Set(samples.map(s => s.subtype))].sort();
 
-    // Extract score matrix from filtered samples
-    const scoreMatrix = filteredSamples.map(sample => {
-      const scores: number[] = [];
-      Object.entries(sample).forEach(([key, value]) => {
-        if (key.startsWith("score_") && typeof value === "number") {
-          scores.push(value);
-        }
-      });
-      return scores.length > 0 ? scores : [Math.random(), Math.random(), Math.random()];
-    });
+    // Get filtered sample indices
+    const filteredIndices = filteredSamples.map(s => sampleIndexMap.get(s.sample_id)!);
+    
+    // Extract expression data for filtered samples only
+    const nGenes = heatmapData.genes.length;
+    const nFilteredSamples = filteredIndices.length;
+    
+    // Create filtered expression matrix
+    const filteredValues: number[][] = heatmapData.values.map(geneRow => 
+      filteredIndices.map(idx => geneRow[idx])
+    );
 
-    // Compute PCA
-    const { pc1, pc2, variance1, variance2 } = computePCA(scoreMatrix);
+    // Compute PCA on gene expression data
+    const { pc1, pc2, variance1, variance2 } = computePCA(filteredValues, nGenes, nFilteredSamples);
 
     const data = filteredSamples.map((sample, idx) => {
       const userAnnotValue = selectedAnnotation && userAnnotations?.annotations[sample.sample_id]
@@ -186,7 +282,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations }: PCAScatt
       variancePC1: variance1,
       variancePC2: variance2
     };
-  }, [filteredSamples, selectedAnnotation, userAnnotations, samples]);
+  }, [filteredSamples, selectedAnnotation, userAnnotations, samples, heatmapData, sampleIndexMap]);
 
   const toggleSubtype = (subtype: string) => {
     setExcludedSubtypes(prev => {
