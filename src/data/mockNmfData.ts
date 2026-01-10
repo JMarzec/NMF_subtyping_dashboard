@@ -144,10 +144,10 @@ export const markerGenes: MarkerGene[] = Object.entries(subtypeGeneSignatures).f
   }))
 );
 
-// Heatmap expression data (genes x samples subset)
+// Heatmap expression data (genes x samples) - uses ALL genes and ALL samples
 export const generateHeatmapData = () => {
-  const genes = Object.values(subtypeGeneSignatures).flat().slice(0, 40);
-  const samples = sampleResults.slice(0, 80);
+  const genes = Object.values(subtypeGeneSignatures).flat(); // All genes
+  const samples = sampleResults; // All samples
   
   return {
     genes,
