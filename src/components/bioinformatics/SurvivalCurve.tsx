@@ -2,8 +2,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
-  LineChart, 
-  Line, 
   XAxis, 
   YAxis, 
   Tooltip, 
@@ -11,7 +9,8 @@ import {
   Legend, 
   Area, 
   ComposedChart,
-  ReferenceLine
+  ReferenceLine,
+  Line
 } from "recharts";
 import { useMemo, useRef } from "react";
 import { Download } from "lucide-react";
@@ -22,13 +21,19 @@ import { estimateCoxPH, formatHR } from "@/lib/coxphAnalysis";
 export interface SurvivalTimePoint {
   time: number;
   survival: number;
-  censored?: number; // Number of censored at this time
-  events?: number;   // Number of events at this time
-  atRisk?: number;   // Number at risk
+  censored?: number;
+  events?: number;
+  atRisk?: number;
+  stdErr?: number;
+  lowerCI?: number;
+  upperCI?: number;
 }
 
 export interface SurvivalData {
   subtype: string;
+  nTotal?: number;
+  nEvents?: number;
+  nCensored?: number;
   timePoints: SurvivalTimePoint[];
 }
 
@@ -79,12 +84,10 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
       let median: number | null = null;
       for (let i = 0; i < monotonic.length; i++) {
         if (monotonic[i].survival <= 0.5) {
-          // Linear interpolation for exact median
           if (i > 0) {
             const prev = monotonic[i - 1];
             const curr = monotonic[i];
             if (prev.survival > 0.5) {
-              // Interpolate
               const slope = (curr.survival - prev.survival) / (curr.time - prev.time);
               if (slope !== 0) {
                 median = prev.time + (0.5 - prev.survival) / slope;
@@ -107,44 +110,62 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
     return result;
   }, [data]);
 
-  // Transform data into step-function format with confidence intervals
-  const { chartData, eventPoints, censorPoints, subtypes, maxTime } = useMemo(() => {
-    if (!data || data.length === 0) return { chartData: [], eventPoints: [], censorPoints: [], subtypes: [], maxTime: 100 };
+  // Transform data for chart - ensure monotonic survival and proper step function
+  const { chartData, eventPoints, censorPoints, subtypes, maxTime, riskTableData } = useMemo(() => {
+    if (!data || data.length === 0) {
+      return { chartData: [], eventPoints: [], censorPoints: [], subtypes: [], maxTime: 100, riskTableData: [] };
+    }
     
     const subtypeNames = data.map(d => d.subtype);
     
-    // For each subtype, create a proper step function with CIs
-    // Ensure survival is monotonically decreasing
+    // Process each subtype - ensure monotonic decreasing survival
     const processedData = data.map(group => {
       const subtype = group.subtype;
-      const n = subtypeCounts?.[subtype] || 100;
+      const n = group.nTotal || subtypeCounts?.[subtype] || 100;
       
-      // Sort time points and ensure monotonicity
-      const sortedPoints = [...group.timePoints]
-        .sort((a, b) => a.time - b.time)
-        .reduce<{ time: number; survival: number; se: number; censored?: number; events?: number }[]>((acc, tp) => {
-          const lastSurvival = acc.length > 0 ? acc[acc.length - 1].survival : 1;
-          // Ensure survival is monotonically non-increasing
-          const survival = Math.min(lastSurvival, tp.survival);
-          
-          // Calculate standard error using Greenwood's formula approximation
-          // SE ≈ S * sqrt((1-S) / (n * S)) when S > 0
-          const se = survival > 0.01 && survival < 0.99
-            ? survival * Math.sqrt((1 - survival) / (n * survival))
-            : 0;
-          
-          acc.push({ 
-            time: tp.time, 
-            survival, 
-            se,
-            censored: tp.censored,
-            events: tp.events
-          });
-          return acc;
-        }, []);
+      // Add initial point at time 0 with survival 1 if not present
+      let points = [...group.timePoints];
+      if (points.length === 0 || points[0].time > 0) {
+        points.unshift({
+          time: 0,
+          survival: 1,
+          atRisk: n,
+          events: 0,
+          censored: 0
+        });
+      }
       
-      return { subtype, points: sortedPoints };
+      // Sort by time
+      points.sort((a, b) => a.time - b.time);
+      
+      // Ensure monotonically decreasing survival
+      let lastSurvival = 1;
+      const sortedPoints = points.map(tp => {
+        const survival = Math.min(lastSurvival, tp.survival);
+        lastSurvival = survival;
+        
+        // Calculate CI if not provided
+        const stdErr = tp.stdErr || (survival > 0.01 && survival < 0.99
+          ? survival * Math.sqrt((1 - survival) / (n * survival))
+          : 0);
+        
+        return { 
+          time: tp.time, 
+          survival, 
+          stdErr,
+          lowerCI: tp.lowerCI ?? Math.max(0, survival - 1.96 * stdErr),
+          upperCI: tp.upperCI ?? Math.min(1, survival + 1.96 * stdErr),
+          atRisk: tp.atRisk,
+          events: tp.events,
+          censored: tp.censored
+        };
+      });
+      
+      return { subtype, points: sortedPoints, n };
     });
+    
+    // Find max time across all subtypes
+    const maxT = Math.max(...processedData.flatMap(g => g.points.map(p => p.time)));
     
     // Get all unique time points
     const allTimes = new Set<number>();
@@ -152,14 +173,13 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
       group.points.forEach(p => allTimes.add(p.time));
     });
     const sortedTimes = Array.from(allTimes).sort((a, b) => a - b);
-    const maxT = sortedTimes.length > 0 ? sortedTimes[sortedTimes.length - 1] : 100;
     
     // Build step-function chart data
     const chartPoints: Record<string, number>[] = [];
-    const lastKnown: Record<string, { survival: number; se: number }> = {};
+    const lastKnown: Record<string, { survival: number; lowerCI: number; upperCI: number; atRisk?: number }> = {};
     
     processedData.forEach(g => {
-      lastKnown[g.subtype] = { survival: 1.0, se: 0 };
+      lastKnown[g.subtype] = { survival: 1.0, lowerCI: 1.0, upperCI: 1.0, atRisk: g.n };
     });
     
     for (let i = 0; i < sortedTimes.length; i++) {
@@ -169,12 +189,17 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
       processedData.forEach(group => {
         const tp = group.points.find(p => p.time === time);
         if (tp) {
-          lastKnown[group.subtype] = { survival: tp.survival, se: tp.se };
+          lastKnown[group.subtype] = { 
+            survival: tp.survival, 
+            lowerCI: tp.lowerCI,
+            upperCI: tp.upperCI,
+            atRisk: tp.atRisk
+          };
         }
-        const { survival, se } = lastKnown[group.subtype];
+        const { survival, lowerCI, upperCI } = lastKnown[group.subtype];
         point[group.subtype] = survival;
-        point[`${group.subtype}_upper`] = Math.min(1, survival + 1.96 * se);
-        point[`${group.subtype}_lower`] = Math.max(0, survival - 1.96 * se);
+        point[`${group.subtype}_upper`] = upperCI;
+        point[`${group.subtype}_lower`] = lowerCI;
       });
       
       chartPoints.push(point);
@@ -183,10 +208,10 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
     // Collect event markers (where survival drops)
     const markers: { time: number; survival: number; subtype: string }[] = [];
     processedData.forEach(group => {
-      for (let i = 1; i < group.points.length; i++) {
-        const prev = group.points[i - 1];
+      for (let i = 0; i < group.points.length; i++) {
         const curr = group.points[i];
-        if (curr.survival < prev.survival - 0.001) {
+        // Add event marker if there are events at this time
+        if ((curr.events && curr.events > 0) || (i > 0 && curr.survival < group.points[i - 1].survival - 0.001)) {
           markers.push({
             time: curr.time,
             survival: curr.survival,
@@ -196,14 +221,11 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
       }
     });
     
-    // Collect censoring markers (where survival stays same or data has censored flag)
-    // Censoring is shown as vertical tick marks
+    // Collect censoring markers
     const censors: { time: number; survival: number; subtype: string }[] = [];
     processedData.forEach(group => {
-      for (let i = 1; i < group.points.length; i++) {
-        const prev = group.points[i - 1];
+      for (let i = 0; i < group.points.length; i++) {
         const curr = group.points[i];
-        
         // Check if explicitly marked as censored
         if (curr.censored && curr.censored > 0) {
           censors.push({
@@ -212,26 +234,34 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
             subtype: group.subtype
           });
         }
-        // Or if survival doesn't drop (indicating censoring at this time)
-        else if (Math.abs(curr.survival - prev.survival) < 0.001 && curr.time > 0) {
-          // This could be a censoring event - but we need explicit data
-          // For now, add censoring marks at every time point where survival is constant
-          // except the first point
-        }
-      }
-      
-      // Also check if the last observation is censored (survival > 0 at end)
-      const lastPoint = group.points[group.points.length - 1];
-      if (lastPoint && lastPoint.survival > 0.001) {
-        censors.push({
-          time: lastPoint.time,
-          survival: lastPoint.survival,
-          subtype: group.subtype
-        });
       }
     });
     
-    return { chartData: chartPoints, eventPoints: markers, censorPoints: censors, subtypes: subtypeNames, maxTime: maxT };
+    // Generate risk table data at regular intervals
+    const riskIntervals = generateRiskIntervals(maxT);
+    const riskTable = riskIntervals.map(t => {
+      const row: Record<string, number | string> = { time: t };
+      processedData.forEach(group => {
+        // Find the last point at or before this time
+        const relevantPoints = group.points.filter(p => p.time <= t);
+        if (relevantPoints.length > 0) {
+          const lastPoint = relevantPoints[relevantPoints.length - 1];
+          row[group.subtype] = lastPoint.atRisk ?? estimateAtRisk(group.points, t, group.n);
+        } else {
+          row[group.subtype] = group.n;
+        }
+      });
+      return row;
+    });
+    
+    return { 
+      chartData: chartPoints, 
+      eventPoints: markers, 
+      censorPoints: censors, 
+      subtypes: subtypeNames, 
+      maxTime: maxT,
+      riskTableData: riskTable
+    };
   }, [data, subtypeCounts]);
 
   if (!data || data.length === 0) {
@@ -280,10 +310,13 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
             <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 10, bottom: 30 }}>
               <XAxis
                 dataKey="time"
+                type="number"
+                domain={[0, 'dataMax']}
                 tick={{ fontSize: 11 }}
                 tickLine={false}
                 axisLine={{ stroke: "hsl(var(--border))" }}
                 label={{ value: "Time (months)", position: "insideBottom", offset: -15, fontSize: 12 }}
+                tickFormatter={(value) => value.toFixed(0)}
               />
               <YAxis
                 domain={[0, 1]}
@@ -306,7 +339,7 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
                   }
                   return [`${(value * 100).toFixed(1)}%`, name];
                 }}
-                labelFormatter={(time) => `Time: ${time} months`}
+                labelFormatter={(time) => `Time: ${Number(time).toFixed(1)} months`}
               />
               <Legend 
                 verticalAlign="top"
@@ -342,12 +375,12 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
                 );
               })}
               
-              {/* Confidence interval areas - upper bounds with fill */}
+              {/* Confidence interval areas */}
               {subtypes.map((subtype) => {
                 const color = subtypeColors[subtype] || "hsl(var(--primary))";
                 return (
                   <Area
-                    key={`${subtype}-upper`}
+                    key={`${subtype}-ci`}
                     type="stepAfter"
                     dataKey={`${subtype}_upper`}
                     fill={color}
@@ -363,7 +396,7 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
                 );
               })}
               
-              {/* Lower bounds - just show as dashed line */}
+              {/* Lower CI bounds */}
               {subtypes.map((subtype) => {
                 const color = subtypeColors[subtype] || "hsl(var(--primary))";
                 return (
@@ -396,21 +429,19 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
                     if (!payload || cx === undefined || cy === undefined) return null;
                     
                     const time = payload.time;
-                    const survival = payload[subtype];
                     const color = subtypeColors[subtype] || "hsl(var(--primary))";
                     
-                    // Check if this is an event point (survival drop)
+                    // Check if this is an event point
                     const isEvent = eventPoints.some(
-                      e => e.subtype === subtype && e.time === time
+                      e => e.subtype === subtype && Math.abs(e.time - time) < 0.01
                     );
                     
                     // Check if this is a censoring point
                     const isCensor = censorPoints.some(
-                      c => c.subtype === subtype && c.time === time
+                      c => c.subtype === subtype && Math.abs(c.time - time) < 0.01
                     );
                     
                     if (isEvent) {
-                      // Event: filled circle
                       return (
                         <circle
                           key={`event-${subtype}-${time}`}
@@ -425,7 +456,6 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
                     }
                     
                     if (isCensor) {
-                      // Censoring: vertical tick mark (like + in R)
                       return (
                         <g key={`censor-${subtype}-${time}`}>
                           <line
@@ -451,7 +481,46 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
           </ResponsiveContainer>
         </div>
         
-        {/* Summary statistics below the chart */}
+        {/* Risk Table */}
+        {riskTableData.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <h4 className="text-sm font-semibold mb-2">Number at Risk</h4>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-1 pr-4 font-medium">Time</th>
+                  {riskTableData.map((row, i) => (
+                    <th key={i} className="text-center py-1 px-2 font-normal text-muted-foreground">
+                      {Number(row.time).toFixed(0)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {subtypes.map(subtype => (
+                  <tr key={subtype} className="border-b border-border/50">
+                    <td className="py-1 pr-4">
+                      <div className="flex items-center gap-2">
+                        <div 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: subtypeColors[subtype] }}
+                        />
+                        <span className="font-medium">{subtype}</span>
+                      </div>
+                    </td>
+                    {riskTableData.map((row, i) => (
+                      <td key={i} className="text-center py-1 px-2">
+                        {row[subtype] !== undefined ? Math.round(Number(row[subtype])) : '-'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        
+        {/* Summary statistics */}
         <div className="mt-4 space-y-3">
           {/* Median survival times */}
           <div className="flex flex-wrap gap-4 justify-center">
@@ -517,3 +586,36 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
     </Card>
   );
 };
+
+// Helper function to generate risk table time intervals
+function generateRiskIntervals(maxTime: number): number[] {
+  const intervals: number[] = [0];
+  
+  // Determine appropriate interval based on max time
+  let step: number;
+  if (maxTime <= 24) {
+    step = 6;
+  } else if (maxTime <= 60) {
+    step = 12;
+  } else if (maxTime <= 120) {
+    step = 24;
+  } else {
+    step = Math.ceil(maxTime / 6);
+  }
+  
+  for (let t = step; t <= maxTime; t += step) {
+    intervals.push(t);
+  }
+  
+  return intervals;
+}
+
+// Helper function to estimate at-risk count when not provided
+function estimateAtRisk(points: SurvivalTimePoint[], time: number, n: number): number {
+  const relevantPoints = points.filter(p => p.time <= time);
+  if (relevantPoints.length === 0) return n;
+  
+  const lastPoint = relevantPoints[relevantPoints.length - 1];
+  // Estimate based on survival probability
+  return Math.round(lastPoint.survival * n);
+}

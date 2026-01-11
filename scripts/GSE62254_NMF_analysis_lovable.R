@@ -74,7 +74,7 @@ W <- basis(nmf_result)
 marker_genes <- list()
 for (k in 1:optimal_rank) {
   gene_weights <- W[, k]
-  top_idx <- order(gene_weights, decreasing = TRUE)[1:20]
+  top_idx <- order(gene_weights, decreasing = TRUE)[1:100]  # Get top 100 per subtype
   for (i in top_idx) {
     marker_genes <- append(marker_genes, list(list(
       gene = rownames(W)[i],
@@ -99,17 +99,68 @@ if (!is.na(surv_time_col) && !is.na(surv_event_col)) {
   # Convert event to binary (1 = event occurred)
   surv_event <- ifelse(grepl("yes|1|dead|death", surv_event, ignore.case = TRUE), 1, 0)
   
-  # Create survival data by subtype
+  # Calculate log-rank p-value
+  surv_formula <- Surv(surv_time, surv_event) ~ factor(sample_subtypes)
+  surv_diff <- survdiff(surv_formula)
+  pvalue <- 1 - pchisq(surv_diff$chisq, length(surv_diff$n) - 1)
+  
+  # Cox Proportional Hazards analysis
+  coxph_res <- coxph(Surv(surv_time, surv_event) ~ factor(sample_subtypes))
+  cox_summary <- summary(coxph_res)
+  
+  # Extract Cox PH results
+  cox_results <- list(
+    referenceGroup = unique(sample_subtypes)[1],
+    groups = lapply(1:nrow(cox_summary$coefficients), function(i) {
+      coef_row <- cox_summary$coefficients[i, ]
+      conf_row <- cox_summary$conf.int[i, ]
+      list(
+        subtype = gsub("factor\\(sample_subtypes\\)", "", rownames(cox_summary$coefficients)[i]),
+        hazardRatio = as.numeric(conf_row["exp(coef)"]),
+        lowerCI = as.numeric(conf_row["lower .95"]),
+        upperCI = as.numeric(conf_row["upper .95"]),
+        pValue = as.numeric(coef_row["Pr(>|z|)"])
+      )
+    }),
+    waldTest = list(
+      chiSquare = as.numeric(cox_summary$wald["test"]),
+      df = as.numeric(cox_summary$wald["df"]),
+      pValue = as.numeric(cox_summary$wald["pvalue"])
+    )
+  )
+  
+  # Create DETAILED survival data with individual event times
+  # This enables exact Kaplan-Meier reproduction in the dashboard
   unique_subtypes <- unique(sample_subtypes)
   survival_data <- lapply(unique_subtypes, function(st) {
     idx <- sample_subtypes == st
-    if (sum(idx) > 0 && any(!is.na(surv_time[idx]))) {
-      fit <- survfit(Surv(surv_time[idx], surv_event[idx]) ~ 1)
+    st_time <- surv_time[idx]
+    st_event <- surv_event[idx]
+    
+    if (sum(!is.na(st_time)) > 0) {
+      # Fit KM curve for this subtype
+      fit <- survfit(Surv(st_time, st_event) ~ 1)
+      
+      # Create detailed time points with all KM statistics
+      timePoints <- lapply(1:length(fit$time), function(i) {
+        list(
+          time = fit$time[i],
+          survival = fit$surv[i],
+          atRisk = fit$n.risk[i],
+          events = fit$n.event[i],
+          censored = fit$n.censor[i],
+          stdErr = fit$std.err[i],
+          lowerCI = fit$lower[i],
+          upperCI = fit$upper[i]
+        )
+      })
+      
       list(
         subtype = st,
-        timePoints = lapply(1:length(fit$time), function(i) {
-          list(time = fit$time[i], survival = fit$surv[i])
-        })
+        nTotal = sum(idx),
+        nEvents = sum(st_event, na.rm = TRUE),
+        nCensored = sum(idx) - sum(st_event, na.rm = TRUE),
+        timePoints = timePoints
       )
     } else {
       NULL
@@ -117,45 +168,75 @@ if (!is.na(surv_time_col) && !is.na(surv_event_col)) {
   })
   survival_data <- Filter(Negate(is.null), survival_data)
   
-  # Calculate log-rank p-value
-  surv_formula <- Surv(surv_time, surv_event) ~ factor(sample_subtypes)
-  surv_diff <- survdiff(surv_formula)
-  pvalue <- 1 - pchisq(surv_diff$chisq, length(surv_diff$n) - 1)
+  # Also create raw survival data for exact calculations
+  raw_survival <- data.frame(
+    sample_id = colnames(expr_data),
+    subtype = sample_subtypes,
+    time = surv_time,
+    event = surv_event,
+    stringsAsFactors = FALSE
+  )
+  raw_survival <- raw_survival[!is.na(raw_survival$time), ]
   
 } else {
   cat("Survival columns not found. Generating placeholder data.\n")
   survival_data <- lapply(unique(sample_subtypes), function(st) {
     list(
       subtype = st,
+      nTotal = sum(sample_subtypes == st),
+      nEvents = 0,
+      nCensored = sum(sample_subtypes == st),
       timePoints = lapply(seq(0, 60, by = 6), function(t) {
-        list(time = t, survival = exp(-t * runif(1, 0.01, 0.03)))
+        list(
+          time = t, 
+          survival = exp(-t * runif(1, 0.01, 0.03)),
+          atRisk = 100,
+          events = 0,
+          censored = 0,
+          stdErr = 0.05,
+          lowerCI = NA,
+          upperCI = NA
+        )
       })
     )
   })
   pvalue <- NA
+  cox_results <- NULL
+  raw_survival <- NULL
 }
 
 # ========== PREPARE HEATMAP DATA ==========
-top_marker_genes <- unique(sapply(marker_genes[1:min(50, length(marker_genes))], function(x) x$gene))
+top_marker_genes <- unique(sapply(marker_genes[1:min(100, length(marker_genes))], function(x) x$gene))
+# Filter to genes that exist in the expression matrix
+top_marker_genes <- intersect(top_marker_genes, rownames(expr_filtered))
 heatmap_expr <- expr_filtered[top_marker_genes, ]
 
 heatmap_data <- list(
   genes = rownames(heatmap_expr),
   samples = colnames(heatmap_expr),
   sampleSubtypes = sample_subtypes,
-  values = as.list(as.data.frame(t(apply(heatmap_expr, 1, as.list))))
+  values = lapply(1:nrow(heatmap_expr), function(i) as.numeric(heatmap_expr[i, ]))
 )
 
-# Fix: Convert heatmap values properly
-heatmap_data$values <- lapply(1:nrow(heatmap_expr), function(i) as.numeric(heatmap_expr[i, ]))
+# ========== PREPARE SAMPLE RESULTS ==========
+sample_results <- lapply(1:ncol(H), function(i) {
+  result <- list(
+    sample_id = colnames(H)[i],
+    subtype = sample_subtypes[i]
+  )
+  # Add score for each subtype
+  for (k in 1:nrow(H)) {
+    result[[paste0("score_subtype_", k)]] <- round(H[k, i], 4)
+  }
+  result
+})
 
 # ========== BUILD OUTPUT JSON ==========
-# Build result list conditionally
 result <- list(
   summary = list(
     dataset = geo_id,
-    n_samples = ncol(expr_matrix),
-    n_genes = nrow(expr_matrix),
+    n_samples = ncol(expr_data),
+    n_genes = nrow(expr_data),
     n_subtypes = optimal_rank,
     subtype_counts = as.list(table(sample_subtypes)),
     cophenetic_correlation = round(estim$measures$cophenetic[which(ranks == optimal_rank)], 3),
@@ -171,7 +252,24 @@ result <- list(
 
 # Add p-value only if it exists
 if (!is.na(pvalue)) {
-  result$survival_pvalue <- round(pvalue, 4)
+  result$survival_pvalue <- pvalue  # Keep full precision
+}
+
+# Add Cox PH results if available
+if (!is.null(cox_results)) {
+  result$coxPHResults <- cox_results
+}
+
+# Add raw survival data for exact calculations (optional, can be large)
+if (!is.null(raw_survival)) {
+  result$rawSurvivalData <- lapply(1:nrow(raw_survival), function(i) {
+    list(
+      sample_id = raw_survival$sample_id[i],
+      subtype = raw_survival$subtype[i],
+      time = raw_survival$time[i],
+      event = raw_survival$event[i]
+    )
+  })
 }
 
 # ========== SAVE OUTPUT ==========
@@ -179,3 +277,8 @@ jsonlite::write_json(result, "nmf_results.json", pretty = TRUE, auto_unbox = TRU
 
 cat("\n✅ Results saved to nmf_results.json\n")
 cat("Upload this file to the dashboard to visualize results.\n")
+cat("\nSurvival Analysis Summary:\n")
+cat(sprintf("  Log-rank p-value: %g\n", pvalue))
+if (!is.null(cox_results)) {
+  cat(sprintf("  Cox PH Wald test p-value: %g\n", cox_results$waldTest$pValue))
+}
