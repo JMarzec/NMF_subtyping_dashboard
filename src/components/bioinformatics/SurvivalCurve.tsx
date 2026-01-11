@@ -1,19 +1,35 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, ReferenceDot } from "recharts";
 import { useMemo, useRef } from "react";
 import { Download } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 
 export interface SurvivalData {
   subtype: string;
-  timePoints: { time: number; survival: number }[];
+  timePoints: { time: number; survival: number; event?: boolean }[];
 }
 
 interface SurvivalCurveProps {
   data: SurvivalData[];
   subtypeColors: Record<string, string>;
 }
+
+// Custom dot component for censored events (vertical tick marks)
+const CensoredDot = (props: { cx?: number; cy?: number; stroke?: string }) => {
+  const { cx, cy, stroke } = props;
+  if (cx === undefined || cy === undefined) return null;
+  return (
+    <line
+      x1={cx}
+      y1={cy - 6}
+      x2={cx}
+      y2={cy + 6}
+      stroke={stroke}
+      strokeWidth={2}
+    />
+  );
+};
 
 export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
@@ -25,25 +41,50 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
   const handleDownloadSVG = () => {
     downloadRechartsAsSVG(chartRef.current, "survival-curve");
   };
-  const chartData = useMemo(() => {
-    if (!data || data.length === 0) return [];
+
+  // Transform data into step-function format for proper Kaplan-Meier display
+  const { chartData, eventMarkers } = useMemo(() => {
+    if (!data || data.length === 0) return { chartData: [], eventMarkers: [] };
     
-    // Get all unique time points
+    // Get all unique time points across all subtypes
     const allTimes = new Set<number>();
     data.forEach(d => d.timePoints.forEach(tp => allTimes.add(tp.time)));
     const sortedTimes = Array.from(allTimes).sort((a, b) => a - b);
     
-    // Build chart data with survival values for each subtype at each time
-    return sortedTimes.map(time => {
+    // Build chart data - for each subtype, carry forward the last known survival value
+    const lastKnownSurvival: Record<string, number> = {};
+    data.forEach(d => { lastKnownSurvival[d.subtype] = 1.0; });
+    
+    const chartPoints = sortedTimes.map(time => {
       const point: Record<string, number> = { time };
       data.forEach(d => {
         const tp = d.timePoints.find(t => t.time === time);
         if (tp) {
-          point[d.subtype] = tp.survival;
+          lastKnownSurvival[d.subtype] = tp.survival;
         }
+        point[d.subtype] = lastKnownSurvival[d.subtype];
       });
       return point;
     });
+    
+    // Collect event markers (drops in survival indicate events)
+    const markers: { time: number; survival: number; subtype: string }[] = [];
+    data.forEach(d => {
+      for (let i = 1; i < d.timePoints.length; i++) {
+        const prev = d.timePoints[i - 1];
+        const curr = d.timePoints[i];
+        // Mark events where survival drops
+        if (curr.survival < prev.survival) {
+          markers.push({
+            time: curr.time,
+            survival: curr.survival,
+            subtype: d.subtype
+          });
+        }
+      }
+    });
+    
+    return { chartData: chartPoints, eventMarkers: markers };
   }, [data]);
 
   const subtypes = data.map(d => d.subtype);
@@ -113,7 +154,7 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
               <Legend 
                 verticalAlign="top"
                 wrapperStyle={{ fontSize: "12px", paddingBottom: "10px" }}
-                iconType="line"
+                iconType="plainline"
               />
               {subtypes.map((subtype) => (
                 <Line
@@ -123,7 +164,20 @@ export const SurvivalCurve = ({ data, subtypeColors }: SurvivalCurveProps) => {
                   stroke={subtypeColors[subtype] || "hsl(var(--primary))"}
                   strokeWidth={2}
                   dot={false}
+                  connectNulls
                   name={subtype}
+                />
+              ))}
+              {/* Event markers - small circles at each survival drop */}
+              {eventMarkers.map((marker, idx) => (
+                <ReferenceDot
+                  key={`event-${idx}`}
+                  x={marker.time}
+                  y={marker.survival}
+                  r={4}
+                  fill={subtypeColors[marker.subtype] || "hsl(var(--primary))"}
+                  stroke="hsl(var(--background))"
+                  strokeWidth={1}
                 />
               ))}
             </LineChart>

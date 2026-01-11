@@ -2,43 +2,85 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MarkerGene } from "@/data/mockNmfData";
-import { useState } from "react";
-import { Download } from "lucide-react";
+import { useState, useMemo } from "react";
+import { Download, Minus, Plus } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface MarkerGenesTableProps {
   genes: MarkerGene[];
   subtypeColors: Record<string, string>;
+  genesPerSubtype?: number;
+  onGenesPerSubtypeChange?: (count: number) => void;
 }
 
-export const MarkerGenesTable = ({ genes, subtypeColors }: MarkerGenesTableProps) => {
+export const MarkerGenesTable = ({ 
+  genes, 
+  subtypeColors, 
+  genesPerSubtype = 25,
+  onGenesPerSubtypeChange 
+}: MarkerGenesTableProps) => {
   const [selectedSubtype, setSelectedSubtype] = useState<string | null>(null);
   
   const subtypes = [...new Set(genes.map(g => g.subtype))].sort();
   
-  // When no filter is selected, show top genes from ALL subtypes (balanced representation)
-  const filteredGenes = selectedSubtype 
-    ? genes.filter(g => g.subtype === selectedSubtype)
-    : (() => {
-        // Get top genes from each subtype for balanced display
-        const genesBySubtype = subtypes.map(subtype => 
-          genes.filter(g => g.subtype === subtype).slice(0, Math.ceil(20 / subtypes.length))
-        );
-        // Interleave genes from different subtypes and limit to 20
-        const interleaved: typeof genes = [];
-        const maxPerSubtype = Math.max(...genesBySubtype.map(arr => arr.length));
-        for (let i = 0; i < maxPerSubtype; i++) {
-          for (const subtypeGenes of genesBySubtype) {
-            if (subtypeGenes[i]) {
-              interleaved.push(subtypeGenes[i]);
-            }
-          }
+  // Filter and limit genes based on genesPerSubtype setting
+  const limitedGenes = useMemo(() => {
+    const genesBySubtype: Record<string, MarkerGene[]> = {};
+    subtypes.forEach(subtype => {
+      genesBySubtype[subtype] = genes
+        .filter(g => g.subtype === subtype)
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, genesPerSubtype);
+    });
+    return Object.values(genesBySubtype).flat();
+  }, [genes, subtypes, genesPerSubtype]);
+  
+  // When no filter is selected, show balanced representation
+  const filteredGenes = useMemo(() => {
+    if (selectedSubtype) {
+      return limitedGenes.filter(g => g.subtype === selectedSubtype);
+    }
+    // Interleave genes from different subtypes for balanced display
+    const genesBySubtype = subtypes.map(subtype => 
+      limitedGenes.filter(g => g.subtype === subtype)
+    );
+    const interleaved: MarkerGene[] = [];
+    const maxPerSubtype = Math.max(...genesBySubtype.map(arr => arr.length));
+    for (let i = 0; i < maxPerSubtype; i++) {
+      for (const subtypeGenes of genesBySubtype) {
+        if (subtypeGenes[i]) {
+          interleaved.push(subtypeGenes[i]);
         }
-        return interleaved.slice(0, 20);
-      })();
+      }
+    }
+    return interleaved;
+  }, [selectedSubtype, limitedGenes, subtypes]);
+
+  const displayGenes = filteredGenes.slice(0, 20);
+
+  const handleIncrement = () => {
+    if (onGenesPerSubtypeChange) {
+      onGenesPerSubtypeChange(Math.min(genesPerSubtype + 5, 100));
+    }
+  };
+
+  const handleDecrement = () => {
+    if (onGenesPerSubtypeChange) {
+      onGenesPerSubtypeChange(Math.max(genesPerSubtype - 5, 5));
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value, 10);
+    if (!isNaN(value) && onGenesPerSubtypeChange) {
+      onGenesPerSubtypeChange(Math.min(Math.max(value, 5), 100));
+    }
+  };
 
   const exportToCSV = () => {
     const header = ["Gene", "Subtype", "Weight"];
-    const exportGenes = selectedSubtype ? genes.filter(g => g.subtype === selectedSubtype) : genes;
+    const exportGenes = selectedSubtype ? limitedGenes.filter(g => g.subtype === selectedSubtype) : limitedGenes;
     const rows = exportGenes.map(g => [g.gene, g.subtype, g.weight.toString()]);
     const csvContent = [header, ...rows].map(row => row.join(",")).join("\n");
     
@@ -53,7 +95,7 @@ export const MarkerGenesTable = ({ genes, subtypeColors }: MarkerGenesTableProps
 
   const exportToTSV = () => {
     const header = ["Gene", "Subtype", "Weight"];
-    const exportGenes = selectedSubtype ? genes.filter(g => g.subtype === selectedSubtype) : genes;
+    const exportGenes = selectedSubtype ? limitedGenes.filter(g => g.subtype === selectedSubtype) : limitedGenes;
     const rows = exportGenes.map(g => [g.gene, g.subtype, g.weight.toString()]);
     const tsvContent = [header, ...rows].map(row => row.join("\t")).join("\n");
     
@@ -69,46 +111,84 @@ export const MarkerGenesTable = ({ genes, subtypeColors }: MarkerGenesTableProps
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-        <div>
+        <div className="space-y-2">
           <CardTitle className="text-lg">Top Marker Genes</CardTitle>
-          <div className="flex flex-wrap gap-2 mt-2">
-          <Badge
-            variant="outline"
-            className={`cursor-pointer transition-all ${!selectedSubtype ? "bg-primary/20 border-primary" : ""}`}
-            onClick={() => setSelectedSubtype(null)}
-          >
-            All
-          </Badge>
-          {subtypes.map(subtype => (
+          <div className="flex flex-wrap gap-2">
             <Badge
-              key={subtype}
               variant="outline"
-              className={`cursor-pointer transition-all ${
-                selectedSubtype === subtype 
-                  ? "border-current" 
-                  : "hover:bg-muted"
-              }`}
-              style={{ 
-                backgroundColor: selectedSubtype === subtype ? `${subtypeColors[subtype]}33` : undefined,
-                color: subtypeColors[subtype],
-                borderColor: selectedSubtype === subtype ? subtypeColors[subtype] : undefined,
-              }}
-              onClick={() => setSelectedSubtype(subtype)}
+              className={`cursor-pointer transition-all ${!selectedSubtype ? "bg-primary/20 border-primary" : ""}`}
+              onClick={() => setSelectedSubtype(null)}
             >
-              {subtype}
+              All
             </Badge>
-          ))}
+            {subtypes.map(subtype => (
+              <Badge
+                key={subtype}
+                variant="outline"
+                className={`cursor-pointer transition-all ${
+                  selectedSubtype === subtype 
+                    ? "border-current" 
+                    : "hover:bg-muted"
+                }`}
+                style={{ 
+                  backgroundColor: selectedSubtype === subtype ? `${subtypeColors[subtype]}33` : undefined,
+                  color: subtypeColors[subtype],
+                  borderColor: selectedSubtype === subtype ? subtypeColors[subtype] : undefined,
+                }}
+                onClick={() => setSelectedSubtype(subtype)}
+              >
+                {subtype}
+              </Badge>
+            ))}
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportToCSV}>
-            <Download className="h-4 w-4 mr-1" />
-            CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={exportToTSV}>
-            <Download className="h-4 w-4 mr-1" />
-            TSV
-          </Button>
+        <div className="flex flex-col gap-2 items-end">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={exportToCSV}>
+              <Download className="h-4 w-4 mr-1" />
+              CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportToTSV}>
+              <Download className="h-4 w-4 mr-1" />
+              TSV
+            </Button>
+          </div>
+          {onGenesPerSubtypeChange && (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="genes-per-subtype" className="text-xs text-muted-foreground whitespace-nowrap">
+                Genes/subtype:
+              </Label>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={handleDecrement}
+                  disabled={genesPerSubtype <= 5}
+                >
+                  <Minus className="h-3 w-3" />
+                </Button>
+                <Input
+                  id="genes-per-subtype"
+                  type="number"
+                  min={5}
+                  max={100}
+                  value={genesPerSubtype}
+                  onChange={handleInputChange}
+                  className="h-7 w-14 text-center text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={handleIncrement}
+                  disabled={genesPerSubtype >= 100}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -122,7 +202,7 @@ export const MarkerGenesTable = ({ genes, subtypeColors }: MarkerGenesTableProps
               </tr>
             </thead>
             <tbody>
-              {filteredGenes.slice(0, 20).map((gene, idx) => (
+              {displayGenes.map((gene, idx) => (
                 <tr key={`${gene.gene}-${idx}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                   <td className="py-2 px-3">
                     <span className="font-mono text-sm font-medium">{gene.gene}</span>

@@ -1,16 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { NmfSummary } from "@/data/mockNmfData";
-import { Database, Dna, Users, TrendingUp, Download } from "lucide-react";
+import { Database, Dna, Users, TrendingUp, Download, Target } from "lucide-react";
 import { useRef } from "react";
 import { downloadChartAsPNG } from "@/lib/chartExport";
 
 interface SummaryCardsProps {
   summary: NmfSummary;
+  markerGenesPerSubtype?: number;
+  totalMarkerGenes?: number;
 }
 
-export const SummaryCards = ({ summary }: SummaryCardsProps) => {
+export const SummaryCards = ({ summary, markerGenesPerSubtype = 25, totalMarkerGenes }: SummaryCardsProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const totalGenes = totalMarkerGenes ?? (markerGenesPerSubtype * summary.n_subtypes);
 
   const cards = [
     {
@@ -41,6 +45,13 @@ export const SummaryCards = ({ summary }: SummaryCardsProps) => {
       icon: TrendingUp,
       gradient: "from-orange-500 to-amber-500",
     },
+    {
+      title: "Marker Genes",
+      value: totalGenes.toLocaleString(),
+      subtitle: `${markerGenesPerSubtype} per subtype`,
+      icon: Target,
+      gradient: "from-pink-500 to-rose-500",
+    },
   ];
 
   const handleDownloadPNG = () => {
@@ -58,7 +69,7 @@ export const SummaryCards = ({ summary }: SummaryCardsProps) => {
           PNG
         </Button>
       </div>
-      <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-background p-2 rounded-lg">
+      <div ref={containerRef} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 bg-background p-2 rounded-lg">
         {cards.map((card) => (
           <Card key={card.title} className="relative overflow-hidden border-0 bg-card/50 backdrop-blur-sm">
             <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-5`} />

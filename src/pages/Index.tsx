@@ -22,7 +22,7 @@ import {
   defaultRankMetrics,
   defaultSurvivalData,
 } from "@/data/mockNmfData";
-import { Dna, RotateCcw } from "lucide-react";
+import { Dna, RotateCcw, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -41,6 +41,9 @@ const Index = () => {
   // Global filter reset key - increment to trigger reset in all components
   const [filterResetKey, setFilterResetKey] = useState(0);
 
+  // Marker genes per subtype setting
+  const [markerGenesPerSubtype, setMarkerGenesPerSubtype] = useState(25);
+
   // Chart refs for batch export
   const summaryRef = useRef<HTMLDivElement>(null);
   const subtypeDistRef = useRef<HTMLDivElement>(null);
@@ -54,6 +57,23 @@ const Index = () => {
 
   const handleGlobalResetFilters = useCallback(() => {
     setFilterResetKey(prev => prev + 1);
+  }, []);
+
+  const handleResetAll = useCallback(() => {
+    // Reset to default data
+    setData({
+      summary: defaultSummary,
+      samples: defaultSamples,
+      markerGenes: defaultMarkerGenes,
+      rankMetrics: defaultRankMetrics,
+      survivalData: defaultSurvivalData,
+    });
+    // Clear annotations
+    setUserAnnotations(undefined);
+    // Reset filters
+    setFilterResetKey(prev => prev + 1);
+    // Reset marker genes per subtype
+    setMarkerGenesPerSubtype(25);
   }, []);
 
   const getChartRefs = useCallback((): ChartRef[] => [
@@ -91,6 +111,11 @@ const Index = () => {
     setUserAnnotations(annotation);
   }, []);
 
+  // Calculate total marker genes
+  const totalMarkerGenes = useMemo(() => {
+    return markerGenesPerSubtype * data.summary.n_subtypes;
+  }, [markerGenesPerSubtype, data.summary.n_subtypes]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -111,7 +136,11 @@ const Index = () => {
               <ExportAllButton getChartRefs={getChartRefs} />
               <Button variant="outline" size="sm" onClick={handleGlobalResetFilters}>
                 <RotateCcw className="h-4 w-4 mr-1" />
-                Reset All Filters
+                Reset Filters
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleResetAll}>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Reset All
               </Button>
             </div>
           </div>
@@ -131,7 +160,11 @@ const Index = () => {
 
         {/* Summary Cards - Full Width */}
         <div ref={summaryRef}>
-          <SummaryCards summary={data.summary} />
+          <SummaryCards 
+            summary={data.summary} 
+            markerGenesPerSubtype={markerGenesPerSubtype}
+            totalMarkerGenes={totalMarkerGenes}
+          />
         </div>
 
         {/* Subtype Distribution - Full Width */}
@@ -193,7 +226,12 @@ const Index = () => {
         </div>
 
         {/* Marker Genes - Full Width */}
-        <MarkerGenesTable genes={data.markerGenes} subtypeColors={subtypeColors} />
+        <MarkerGenesTable 
+          genes={data.markerGenes} 
+          subtypeColors={subtypeColors}
+          genesPerSubtype={markerGenesPerSubtype}
+          onGenesPerSubtypeChange={setMarkerGenesPerSubtype}
+        />
       </main>
 
       {/* Footer */}
