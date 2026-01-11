@@ -270,6 +270,8 @@ const Index = () => {
             data={data.survivalData || []} 
             subtypeColors={subtypeColors}
             subtypeCounts={data.summary.subtype_counts}
+            survivalPValue={data.survival_pvalue}
+            coxPHResults={data.coxPHResults}
           />
         </div>
 

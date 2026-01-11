@@ -5,6 +5,23 @@ import { Upload, FileJson, Check, AlertCircle, Download, HelpCircle } from "luci
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { NmfSummary, SampleResult, MarkerGene, RankMetric, SurvivalDataPoint } from "@/data/mockNmfData";
 
+// Cox PH results from R (pre-computed)
+export interface CoxPHResultFromJSON {
+  referenceGroup: string;
+  groups: Array<{
+    subtype: string;
+    hazardRatio: number;
+    lowerCI: number;
+    upperCI: number;
+    pValue: number;
+  }>;
+  waldTest: {
+    chiSquare: number;
+    df: number;
+    pValue: number;
+  };
+}
+
 export interface NmfData {
   summary: NmfSummary;
   samples: SampleResult[];
@@ -17,6 +34,9 @@ export interface NmfData {
   };
   rankMetrics?: RankMetric[];
   survivalData?: SurvivalDataPoint[];
+  // Pre-computed survival statistics from R
+  survival_pvalue?: number;
+  coxPHResults?: CoxPHResultFromJSON;
 }
 
 // Raw JSON format (may use different field names)
@@ -28,6 +48,8 @@ interface RawNmfData {
   heatmapData?: NmfData['heatmapData'];
   rankMetrics?: RankMetric[];
   survivalData?: SurvivalDataPoint[];
+  survival_pvalue?: number;
+  coxPHResults?: CoxPHResultFromJSON;
 }
 
 interface JsonUploaderProps {
@@ -79,6 +101,8 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
       heatmapData: d.heatmapData,
       rankMetrics: d.rankMetrics,
       survivalData: d.survivalData,
+      survival_pvalue: d.survival_pvalue,
+      coxPHResults: d.coxPHResults,
     };
   };
 
@@ -106,6 +130,8 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
       const features = [];
       if (normalizedData.rankMetrics) features.push("rank metrics");
       if (normalizedData.survivalData) features.push("survival data");
+      if (normalizedData.coxPHResults) features.push("Cox PH results");
+      if (normalizedData.survival_pvalue !== undefined) features.push("log-rank p-value");
       const featuresStr = features.length > 0 ? ` (includes ${features.join(", ")})` : "";
       
       setMessage(`Loaded ${normalizedData.summary.n_samples} samples with ${normalizedData.summary.n_subtypes} subtypes${featuresStr}`);

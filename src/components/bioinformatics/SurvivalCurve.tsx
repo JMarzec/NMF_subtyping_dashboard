@@ -16,7 +16,8 @@ import { useMemo, useRef } from "react";
 import { Download } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { logRankTest, formatPValue } from "@/lib/logRankTest";
-import { estimateCoxPH, formatHR } from "@/lib/coxphAnalysis";
+import { estimateCoxPH, formatHR, CoxPHResult } from "@/lib/coxphAnalysis";
+import { CoxPHResultFromJSON } from "@/components/bioinformatics/JsonUploader";
 
 export interface SurvivalTimePoint {
   time: number;
@@ -41,9 +42,18 @@ interface SurvivalCurveProps {
   data: SurvivalData[];
   subtypeColors: Record<string, string>;
   subtypeCounts?: Record<string, number>;
+  // Pre-computed values from R (optional - will estimate if not provided)
+  survivalPValue?: number;
+  coxPHResults?: CoxPHResultFromJSON;
 }
 
-export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCurveProps) => {
+export const SurvivalCurve = ({ 
+  data, 
+  subtypeColors, 
+  subtypeCounts,
+  survivalPValue,
+  coxPHResults 
+}: SurvivalCurveProps) => {
   const chartRef = useRef<HTMLDivElement>(null);
 
   const handleDownloadPNG = () => {
@@ -54,15 +64,23 @@ export const SurvivalCurve = ({ data, subtypeColors, subtypeCounts }: SurvivalCu
     downloadRechartsAsSVG(chartRef.current, "survival-curve");
   };
 
-  // Calculate log-rank test p-value
+  // Use pre-computed log-rank p-value from JSON if available, otherwise calculate
   const logRankResult = useMemo(() => {
+    if (survivalPValue !== undefined) {
+      // Use the pre-computed p-value from R
+      return { pValue: survivalPValue, chiSquare: 0, df: 0 };
+    }
     return logRankTest(data, subtypeCounts);
-  }, [data, subtypeCounts]);
+  }, [data, subtypeCounts, survivalPValue]);
 
-  // Calculate Cox PH results
-  const coxPHResult = useMemo(() => {
+  // Use pre-computed Cox PH results from JSON if available, otherwise estimate
+  const coxPHResult = useMemo((): CoxPHResult | CoxPHResultFromJSON | null => {
+    if (coxPHResults) {
+      // Use the pre-computed results from R
+      return coxPHResults;
+    }
     return estimateCoxPH(data, subtypeCounts);
-  }, [data, subtypeCounts]);
+  }, [data, subtypeCounts, coxPHResults]);
 
   // Calculate median survival for each subtype
   const medianSurvival = useMemo(() => {
