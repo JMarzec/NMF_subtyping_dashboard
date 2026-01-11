@@ -7,7 +7,7 @@
  * the results in the JSON data.
  */
 
-import { SurvivalData } from "@/components/bioinformatics/SurvivalCurve";
+import { SurvivalData, SurvivalTimePoint } from "@/components/bioinformatics/SurvivalCurve";
 
 export interface CoxPHResult {
   referenceGroup: string;
@@ -47,6 +47,24 @@ export interface StratifiedCoxPHResult extends CoxPHResult {
     pValue: number;
     significant: boolean;
   };
+}
+
+export interface MultivariateCoxPHResult {
+  covariates: Array<{
+    name: string;
+    hazardRatio: number;
+    lowerCI: number;
+    upperCI: number;
+    pValue: number;
+    coefficient: number;
+    se: number;
+  }>;
+  waldTest: {
+    chiSquare: number;
+    df: number;
+    pValue: number;
+  };
+  concordance?: number;
 }
 
 /**
@@ -440,5 +458,182 @@ export function stratifiedCoxPH(
     strataResults,
     pooledHR,
     interactionTest
+  };
+}
+
+/**
+ * Multivariate Cox PH analysis
+ * Includes multiple covariates simultaneously in the model
+ * Uses a simplified approach that estimates independent effects
+ */
+export function multivariateCoxPH(
+  survivalData: SurvivalData[],
+  covariateData: Record<string, Record<string, string | number>>, // covariate -> sampleId -> value
+  sampleSubtypes: Record<string, string>,
+  subtypeCounts?: Record<string, number>
+): MultivariateCoxPHResult | null {
+  if (!survivalData || survivalData.length < 2) {
+    return null;
+  }
+
+  const covariateNames = Object.keys(covariateData);
+  if (covariateNames.length === 0) {
+    return null;
+  }
+
+  const covariates: MultivariateCoxPHResult['covariates'] = [];
+  
+  // For each covariate, estimate its effect on survival
+  // This is a simplified approach - true multivariate would solve simultaneous equations
+  for (const covariateName of covariateNames) {
+    const values = covariateData[covariateName];
+    const uniqueValues = [...new Set(Object.values(values).map(v => String(v)))].sort();
+    
+    if (uniqueValues.length < 2) continue;
+    
+    // Check if numeric (continuous) or categorical
+    const isNumeric = uniqueValues.every(v => !isNaN(parseFloat(v)));
+    
+    if (isNumeric) {
+      // For continuous covariates, estimate effect per unit increase
+      // Group samples by above/below median
+      const numericValues = Object.entries(values).map(([id, v]) => ({ id, value: parseFloat(String(v)) }));
+      const sortedValues = numericValues.sort((a, b) => a.value - b.value);
+      const medianIdx = Math.floor(sortedValues.length / 2);
+      const median = sortedValues[medianIdx].value;
+      
+      // Create binary groups
+      const lowGroup = sortedValues.filter(v => v.value < median).map(v => v.id);
+      const highGroup = sortedValues.filter(v => v.value >= median).map(v => v.id);
+      
+      // Weight survival by group membership
+      const groupCounts: Record<string, Record<string, number>> = { low: {}, high: {} };
+      lowGroup.forEach(id => {
+        const subtype = sampleSubtypes[id];
+        if (subtype) groupCounts.low[subtype] = (groupCounts.low[subtype] || 0) + 1;
+      });
+      highGroup.forEach(id => {
+        const subtype = sampleSubtypes[id];
+        if (subtype) groupCounts.high[subtype] = (groupCounts.high[subtype] || 0) + 1;
+      });
+      
+      // Create weighted survival curves for low/high groups
+      const lowSurvival = createWeightedSurvival("low", survivalData, groupCounts.low, subtypeCounts);
+      const highSurvival = createWeightedSurvival("high", survivalData, groupCounts.high, subtypeCounts);
+      
+      if (lowSurvival && highSurvival) {
+        const result = estimateCoxPH([lowSurvival, highSurvival], { low: lowGroup.length, high: highGroup.length });
+        if (result && result.groups.length > 0) {
+          const g = result.groups[0];
+          covariates.push({
+            name: covariateName,
+            hazardRatio: g.hazardRatio,
+            lowerCI: g.lowerCI,
+            upperCI: g.upperCI,
+            pValue: g.pValue,
+            coefficient: g.coefficient,
+            se: g.se
+          });
+        }
+      }
+    } else {
+      // For categorical covariates, use first value as reference
+      const referenceValue = uniqueValues[0];
+      const referenceIds = Object.entries(values).filter(([, v]) => String(v) === referenceValue).map(([id]) => id);
+      
+      // Combine all non-reference as comparison group
+      const comparisonIds = Object.entries(values).filter(([, v]) => String(v) !== referenceValue).map(([id]) => id);
+      
+      const groupCounts: Record<string, Record<string, number>> = { reference: {}, comparison: {} };
+      referenceIds.forEach(id => {
+        const subtype = sampleSubtypes[id];
+        if (subtype) groupCounts.reference[subtype] = (groupCounts.reference[subtype] || 0) + 1;
+      });
+      comparisonIds.forEach(id => {
+        const subtype = sampleSubtypes[id];
+        if (subtype) groupCounts.comparison[subtype] = (groupCounts.comparison[subtype] || 0) + 1;
+      });
+      
+      const refSurvival = createWeightedSurvival("reference", survivalData, groupCounts.reference, subtypeCounts);
+      const compSurvival = createWeightedSurvival("comparison", survivalData, groupCounts.comparison, subtypeCounts);
+      
+      if (refSurvival && compSurvival) {
+        const result = estimateCoxPH([refSurvival, compSurvival], { reference: referenceIds.length, comparison: comparisonIds.length });
+        if (result && result.groups.length > 0) {
+          const g = result.groups[0];
+          covariates.push({
+            name: `${covariateName} (vs ${referenceValue})`,
+            hazardRatio: g.hazardRatio,
+            lowerCI: g.lowerCI,
+            upperCI: g.upperCI,
+            pValue: g.pValue,
+            coefficient: g.coefficient,
+            se: g.se
+          });
+        }
+      }
+    }
+  }
+  
+  if (covariates.length === 0) {
+    return null;
+  }
+  
+  // Calculate overall Wald test
+  const chiSquare = covariates.reduce((sum, c) => sum + Math.pow(c.coefficient / c.se, 2), 0);
+  const df = covariates.length;
+  const waldPValue = 1 - chiSquareCDF(chiSquare, df);
+  
+  return {
+    covariates,
+    waldTest: {
+      chiSquare,
+      df,
+      pValue: waldPValue
+    }
+  };
+}
+
+/**
+ * Helper function to create weighted survival data for a group
+ */
+function createWeightedSurvival(
+  groupName: string,
+  survivalData: SurvivalData[],
+  subtypeCounts: Record<string, number>,
+  totalSubtypeCounts?: Record<string, number>
+): SurvivalData | null {
+  const total = Object.values(subtypeCounts).reduce((a, b) => a + b, 0);
+  if (total === 0) return null;
+  
+  // Get all unique time points
+  const allTimes = new Set<number>();
+  survivalData.forEach(d => d.timePoints.forEach(tp => allTimes.add(tp.time)));
+  const sortedTimes = Array.from(allTimes).sort((a, b) => a - b);
+  
+  // Create weighted time points
+  const timePoints: SurvivalTimePoint[] = sortedTimes.map(time => {
+    let weightedSurvival = 0;
+    
+    Object.entries(subtypeCounts).forEach(([subtype, count]) => {
+      const weight = count / total;
+      const subtypeData = survivalData.find(d => d.subtype === subtype);
+      if (subtypeData) {
+        const relevantPoints = subtypeData.timePoints.filter(tp => tp.time <= time);
+        if (relevantPoints.length > 0) {
+          weightedSurvival += weight * relevantPoints[relevantPoints.length - 1].survival;
+        } else {
+          weightedSurvival += weight * 1;
+        }
+      }
+    });
+    
+    return { time, survival: weightedSurvival };
+  });
+  
+  return {
+    subtype: groupName,
+    nTotal: total,
+    timePoints
   };
 }
