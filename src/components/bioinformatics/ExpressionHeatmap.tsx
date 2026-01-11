@@ -500,32 +500,34 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
       const scrollWidth = element.scrollWidth;
       const scrollHeight = element.scrollHeight;
 
-      // Extra padding for labels - increased bottom padding for legends
+      // Extra padding for labels
       const paddingLeft = 20;
-      const paddingRight = 80;
-      const paddingBottom = 120; // Increased for annotation legend and sample names
+      const paddingRight = 100;
+      const paddingTop = 80; // For sample names at top
+      const paddingBottom = 140; // For legends
 
       const canvas = await html2canvas(element, {
         backgroundColor: "#ffffff",
-        scale: 4, // Increased for better readability
+        scale: 4,
         logging: false,
         useCORS: true,
         allowTaint: true,
         width: scrollWidth + paddingLeft + paddingRight,
-        height: scrollHeight + paddingBottom,
+        height: scrollHeight + paddingTop + paddingBottom,
         windowWidth: scrollWidth + paddingLeft + paddingRight,
-        windowHeight: scrollHeight + paddingBottom,
+        windowHeight: scrollHeight + paddingTop + paddingBottom,
         x: -paddingLeft,
-        y: 0,
+        y: -paddingTop,
         scrollX: 0,
         scrollY: 0,
         onclone: (clonedDoc) => {
           const clonedElement = clonedDoc.body.querySelector('[data-heatmap-export="true"]') as HTMLElement | null;
           if (!clonedElement) return;
 
-          // Add left margin to the cloned element
+          // Add margins to the cloned element
           clonedElement.style.marginLeft = `${paddingLeft}px`;
           clonedElement.style.marginRight = `${paddingRight}px`;
+          clonedElement.style.marginTop = `${paddingTop}px`;
           clonedElement.style.paddingBottom = `${paddingBottom}px`;
 
           // Force all text to web-safe fonts
@@ -535,7 +537,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
             }
           });
 
-          // Fix gene labels - ensure they're fully visible with smaller font
+          // Fix gene labels
           clonedElement.querySelectorAll('.text-xs.text-left.truncate.text-muted-foreground').forEach((el) => {
             if (el instanceof HTMLElement && el.closest('.flex-col')) {
               el.style.fontSize = '9px';
@@ -544,38 +546,32 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
             }
           });
 
-          // Fix sample labels - render vertically like in SVG export
-          clonedElement.querySelectorAll('[data-heatmap-sample-label="true"]').forEach((el, index) => {
+          // Fix sample labels - use writing-mode approach that works with html2canvas
+          clonedElement.querySelectorAll('[data-heatmap-sample-label="true"]').forEach((el) => {
             if (!(el instanceof HTMLElement)) return;
             const span = el.querySelector('span');
             
-            // Create a container with enough height for rotated text
-            el.style.position = 'relative';
-            el.style.height = '90px'; // Increased height for full sample names
+            // Increase container height significantly
+            el.style.height = '70px';
             el.style.width = `${cellWidth}px`;
             el.style.overflow = 'visible';
-            el.style.marginTop = '6px';
+            el.style.writingMode = 'vertical-rl';
+            el.style.textOrientation = 'mixed';
+            el.style.transform = 'rotate(180deg)';
             el.style.display = 'flex';
             el.style.alignItems = 'flex-start';
-            el.style.justifyContent = 'center';
+            el.style.justifyContent = 'flex-start';
+            el.style.paddingTop = '2px';
             
             if (span) {
-              // Get sample name for this position
-              const sampleName = span.textContent || '';
-              
-              span.style.position = 'absolute';
-              span.style.left = `${cellWidth / 2 + 2}px`;
-              span.style.top = '0';
-              span.style.transformOrigin = 'left top';
-              span.style.transform = 'rotate(90deg)';
-              span.style.whiteSpace = 'nowrap';
-              span.style.fontSize = '6px';
+              span.style.fontSize = '5px';
               span.style.fontFamily = 'Arial, sans-serif';
+              span.style.color = '#374151';
+              span.style.whiteSpace = 'nowrap';
               span.style.overflow = 'visible';
               span.style.textOverflow = 'clip';
-              span.style.color = '#4b5563';
-              span.style.lineHeight = '1';
-              span.textContent = sampleName;
+              span.style.maxWidth = 'none';
+              span.style.maxHeight = 'none';
             }
           });
         },
@@ -1032,25 +1028,27 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
                 <div
                   key={`sample-${i}`}
                   data-heatmap-sample-label="true"
-                  className="text-[6px] text-muted-foreground overflow-hidden"
+                  className="text-[5px] text-muted-foreground"
                   style={{
                     width: cellWidth,
-                    height: 50,
+                    height: 65,
                     writingMode: "vertical-rl",
                     textOrientation: "mixed",
                     transform: "rotate(180deg)",
                     display: "flex",
-                    alignItems: "center",
-                    justifyContent: "flex-end",
+                    alignItems: "flex-start",
+                    justifyContent: "flex-start",
+                    paddingTop: 2,
+                    overflow: "visible",
                   }}
                   title={filteredData.samples[idx]}
                 >
-                  <span className="truncate">{filteredData.samples[idx]}</span>
+                  <span style={{ whiteSpace: "nowrap", overflow: "visible" }}>{filteredData.samples[idx]}</span>
                 </div>
               ))}
             </div>
             <div style={{ width: 4 }} />
-            <div className="text-[8px] text-muted-foreground text-left truncate pl-1 flex items-end" style={{ width: 80, height: 50 }}>
+            <div className="text-[8px] text-muted-foreground text-left truncate pl-1 flex items-end" style={{ width: 80, height: 65 }}>
               Sample ID
             </div>
           </div>

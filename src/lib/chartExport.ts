@@ -122,25 +122,22 @@ const applyComputedStylesToSVG = (svgElement: SVGElement, originalSvg: SVGElemen
   const elements = svgElement.querySelectorAll('*');
   const originalElements = originalSvg.querySelectorAll('*');
   
-  // Create a map of original elements to get their computed styles
-  const originalMap = new Map<string, Element>();
-  originalElements.forEach((el, idx) => {
-    originalMap.set(`${el.tagName}-${idx}`, el);
-  });
+  // Create arrays for direct index matching
+  const originalArray = Array.from(originalElements);
   
   elements.forEach((el, idx) => {
     if (el instanceof SVGElement) {
-      const originalEl = originalMap.get(`${el.tagName}-${idx}`);
-      const computedStyle = originalEl ? window.getComputedStyle(originalEl) : window.getComputedStyle(el);
+      const originalEl = originalArray[idx];
+      const computedStyle = originalEl ? window.getComputedStyle(originalEl) : null;
       
       const tagName = el.tagName.toLowerCase();
       
       // Apply stroke properties for shape elements
       if (['line', 'path', 'polyline', 'polygon', 'circle', 'rect', 'ellipse'].includes(tagName)) {
-        const stroke = computedStyle.stroke;
-        const strokeWidth = computedStyle.strokeWidth;
-        const strokeOpacity = computedStyle.strokeOpacity;
-        const strokeDasharray = computedStyle.strokeDasharray;
+        const stroke = computedStyle?.stroke;
+        const strokeWidth = computedStyle?.strokeWidth;
+        const strokeOpacity = computedStyle?.strokeOpacity;
+        const strokeDasharray = computedStyle?.strokeDasharray;
         
         // For Recharts axis lines that might have class-based styling
         const hasAxisClass = el.classList.contains('recharts-cartesian-axis-line') ||
@@ -152,8 +149,8 @@ const applyComputedStylesToSVG = (svgElement: SVGElement, originalSvg: SVGElemen
                             el.classList.contains('recharts-cartesian-grid-vertical') ||
                             el.closest('.recharts-cartesian-grid');
         
-        // Set stroke - use defaults for axis/grid if computed style is empty
-        if (stroke && stroke !== 'none' && stroke !== '') {
+        // Set stroke - use defaults for axis/grid if computed style is empty or none
+        if (stroke && stroke !== 'none' && stroke !== '' && stroke !== 'rgba(0, 0, 0, 0)') {
           el.setAttribute('stroke', stroke);
         } else if (hasAxisClass) {
           el.setAttribute('stroke', '#666666');
@@ -176,39 +173,42 @@ const applyComputedStylesToSVG = (svgElement: SVGElement, originalSvg: SVGElemen
         }
         
         // Apply fill
-        const fill = computedStyle.fill;
-        if (fill && fill !== 'none' && fill !== '') {
+        const fill = computedStyle?.fill;
+        if (fill && fill !== 'none' && fill !== '' && fill !== 'rgba(0, 0, 0, 0)') {
           el.setAttribute('fill', fill);
         }
       }
       
-      // Apply text properties
+      // Apply text properties - ALWAYS set defaults to ensure text is visible
       if (tagName === 'text' || tagName === 'tspan') {
-        const fontSize = computedStyle.fontSize;
-        const fontFamily = computedStyle.fontFamily;
-        const fontWeight = computedStyle.fontWeight;
-        const textAnchor = computedStyle.textAnchor;
-        const fill = computedStyle.fill;
-        const color = computedStyle.color;
+        const fontSize = computedStyle?.fontSize;
+        const fontFamily = computedStyle?.fontFamily;
+        const fontWeight = computedStyle?.fontWeight;
+        const textAnchor = computedStyle?.textAnchor;
+        const fill = computedStyle?.fill;
+        const color = computedStyle?.color;
         
-        if (fontSize) el.setAttribute('font-size', fontSize);
-        if (fontFamily) {
-          el.setAttribute('font-family', fontFamily);
-        } else {
-          el.setAttribute('font-family', 'Arial, sans-serif');
-        }
+        // Always set font-size with fallback
+        el.setAttribute('font-size', fontSize && fontSize !== '0px' ? fontSize : '12px');
+        
+        // Always set font-family
+        el.setAttribute('font-family', fontFamily && fontFamily !== '' ? fontFamily : 'Arial, sans-serif');
+        
         if (fontWeight && fontWeight !== 'normal' && fontWeight !== '400') {
           el.setAttribute('font-weight', fontWeight);
         }
-        if (textAnchor) el.setAttribute('text-anchor', textAnchor);
+        if (textAnchor && textAnchor !== 'start') {
+          el.setAttribute('text-anchor', textAnchor);
+        }
         
-        // Ensure text has fill color
-        if (fill && fill !== 'none' && fill !== '') {
+        // Always ensure text has a visible fill color
+        if (fill && fill !== 'none' && fill !== '' && fill !== 'rgba(0, 0, 0, 0)') {
           el.setAttribute('fill', fill);
-        } else if (color && color !== '') {
+        } else if (color && color !== '' && color !== 'rgba(0, 0, 0, 0)') {
           el.setAttribute('fill', color);
         } else {
-          el.setAttribute('fill', '#666666');
+          // Force a default visible color for all text
+          el.setAttribute('fill', '#374151');
         }
       }
     }
