@@ -13,10 +13,10 @@ import {
   Line
 } from "recharts";
 import { useMemo, useRef, useState } from "react";
-import { Download, FileSpreadsheet, Database, Calculator, Trash2 } from "lucide-react";
+import { Download, FileSpreadsheet, Database, Calculator, Trash2, TrendingUp } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { logRankTest, formatPValue } from "@/lib/logRankTest";
-import { estimateCoxPH, formatHR, CoxPHResult, stratifiedCoxPH, StratifiedCoxPHResult, multivariateCoxPH, MultivariateCoxPHResult, stepwiseModelComparison, ModelComparisonResult, backwardElimination, BackwardEliminationResult } from "@/lib/coxphAnalysis";
+import { estimateCoxPH, formatHR, CoxPHResult, stratifiedCoxPH, StratifiedCoxPHResult, multivariateCoxPH, MultivariateCoxPHResult, stepwiseModelComparison, ModelComparisonResult, backwardElimination, BackwardEliminationResult, forwardSelection, ForwardSelectionResult } from "@/lib/coxphAnalysis";
 import { CoxPHResultFromJSON } from "@/components/bioinformatics/JsonUploader";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,6 +28,7 @@ import { MultivariateForestPlot } from "@/components/bioinformatics/Multivariate
 import { CovariateSelector } from "@/components/bioinformatics/CovariateSelector";
 import { ModelComparisonPanel } from "@/components/bioinformatics/ModelComparisonPanel";
 import { BackwardEliminationPanel } from "@/components/bioinformatics/BackwardEliminationPanel";
+import { ForwardSelectionPanel } from "@/components/bioinformatics/ForwardSelectionPanel";
 
 export interface SurvivalTimePoint {
   time: number;
@@ -312,6 +313,9 @@ export const SurvivalCurve = ({
 
   // Backward elimination result
   const [backwardEliminationResult, setBackwardEliminationResult] = useState<BackwardEliminationResult | null>(null);
+  
+  // Forward selection result
+  const [forwardSelectionResult, setForwardSelectionResult] = useState<ForwardSelectionResult | null>(null);
 
   const runBackwardElimination = () => {
     if (selectedCovariates.length < 2 || !userAnnotations || !sampleSubtypes) {
@@ -332,11 +336,39 @@ export const SurvivalCurve = ({
 
     const result = backwardElimination(data, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 0.05);
     setBackwardEliminationResult(result);
+    setForwardSelectionResult(null);
+  };
+
+  const runForwardSelection = () => {
+    if (annotationColumns.length < 1 || !userAnnotations || !sampleSubtypes) {
+      return;
+    }
+
+    const covariateData: Record<string, Record<string, string | number>> = {};
+    
+    annotationColumns.forEach(covariate => {
+      covariateData[covariate] = {};
+      Object.entries(userAnnotations.annotations).forEach(([sampleId, cols]) => {
+        const value = cols[covariate];
+        if (value !== undefined && value !== null && value !== '') {
+          covariateData[covariate][sampleId] = value;
+        }
+      });
+    });
+
+    const result = forwardSelection(data, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05);
+    setForwardSelectionResult(result);
+    setBackwardEliminationResult(null);
   };
 
   const applyBackwardEliminationResult = (covariates: string[]) => {
     setSelectedCovariates(covariates);
     setBackwardEliminationResult(null);
+  };
+
+  const applyForwardSelectionResult = (covariates: string[]) => {
+    setSelectedCovariates(covariates);
+    setForwardSelectionResult(null);
   };
 
   const toggleCovariate = (covariate: string) => {
@@ -346,21 +378,25 @@ export const SurvivalCurve = ({
         : [...prev, covariate]
     );
     setBackwardEliminationResult(null);
+    setForwardSelectionResult(null);
   };
 
   const selectAllCovariates = () => {
     setSelectedCovariates([...annotationColumns]);
     setBackwardEliminationResult(null);
+    setForwardSelectionResult(null);
   };
 
   const clearAllCovariates = () => {
     setSelectedCovariates([]);
     setBackwardEliminationResult(null);
+    setForwardSelectionResult(null);
   };
 
   const reorderCovariates = (newOrder: string[]) => {
     setSelectedCovariates(newOrder);
     setBackwardEliminationResult(null);
+    setForwardSelectionResult(null);
   };
 
   // Export survival statistics as CSV/TSV
@@ -757,7 +793,7 @@ export const SurvivalCurve = ({
 
             {/* Multivariate Covariates Selector */}
             {annotationColumns.length > 0 && groupBy === "nmf_subtype" && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <CovariateSelector
                   columns={annotationColumns}
                   selectedCovariates={selectedCovariates}
@@ -766,6 +802,28 @@ export const SurvivalCurve = ({
                   onClearAll={clearAllCovariates}
                   onReorder={reorderCovariates}
                 />
+                
+                {/* Forward Selection - works on all candidates */}
+                <TooltipProvider>
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={runForwardSelection}
+                      >
+                        <TrendingUp className="h-3.5 w-3.5 mr-1" />
+                        Forward Selection
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Build model by adding significant covariates (p &lt; 0.05) one at a time</p>
+                    </TooltipContent>
+                  </UITooltip>
+                </TooltipProvider>
+
+                {/* Backward Elimination - requires selection */}
                 {selectedCovariates.length >= 2 && (
                   <TooltipProvider>
                     <UITooltip>
@@ -1220,6 +1278,14 @@ export const SurvivalCurve = ({
       <BackwardEliminationPanel 
         result={backwardEliminationResult} 
         onApplyFinal={applyBackwardEliminationResult}
+      />
+    )}
+
+    {/* Forward Selection Results */}
+    {forwardSelectionResult && (
+      <ForwardSelectionPanel 
+        result={forwardSelectionResult} 
+        onApplyFinal={applyForwardSelectionResult}
       />
     )}
   </div>

@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { FileSpreadsheet, Calculator } from "lucide-react";
+import { FileSpreadsheet, Calculator, Activity } from "lucide-react";
 import { MultivariateCoxPHResult, formatHR } from "@/lib/coxphAnalysis";
 import { formatPValue } from "@/lib/logRankTest";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -51,9 +51,12 @@ export const MultivariateResultsTable = ({ result }: MultivariateResultsTablePro
       ].join(separator));
     });
     
-    // Wald test
+    // Model statistics
     lines.push('');
     lines.push(['Wald Test', '', '', '', result.waldTest.pValue.toExponential(4), '', '', `Chi-sq: ${result.waldTest.chiSquare.toFixed(2)}`, `df: ${result.waldTest.df}`].join(separator));
+    if (result.concordance !== undefined) {
+      lines.push(['C-index', result.concordance.toFixed(4), '', '', '', '', '', '', ''].join(separator));
+    }
     
     const content = lines.join('\n');
     const blob = new Blob([content], { type: format === 'csv' ? 'text/csv' : 'text/tab-separated-values' });
@@ -93,6 +96,42 @@ export const MultivariateResultsTable = ({ result }: MultivariateResultsTablePro
           >
             Wald p={formatPValue(result.waldTest.pValue)}
           </Badge>
+          
+          {/* Concordance Index (C-statistic) */}
+          {result.concordance !== undefined && (
+            <TooltipProvider>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant="outline" 
+                    className={`cursor-help ${
+                      result.concordance >= 0.7 
+                        ? 'border-green-500 text-green-700 dark:text-green-400' 
+                        : result.concordance >= 0.6 
+                          ? 'border-yellow-500 text-yellow-700 dark:text-yellow-400'
+                          : 'border-muted'
+                    }`}
+                  >
+                    <Activity className="h-3 w-3 mr-1" />
+                    C-index: {result.concordance.toFixed(3)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs">
+                  <p className="font-medium mb-1">Concordance Index (C-statistic)</p>
+                  <p className="text-xs">
+                    Measures model's discriminative ability.
+                    {result.concordance >= 0.7 ? ' Good discrimination.' 
+                      : result.concordance >= 0.6 ? ' Moderate discrimination.'
+                      : result.concordance >= 0.5 ? ' Poor discrimination.'
+                      : ' No discrimination (random).'}
+                  </p>
+                  <p className="text-xs mt-1 text-muted-foreground">
+                    Range: 0.5 (random) to 1.0 (perfect)
+                  </p>
+                </TooltipContent>
+              </UITooltip>
+            </TooltipProvider>
+          )}
           
           {/* P-value type selector */}
           <div className="flex items-center gap-2">

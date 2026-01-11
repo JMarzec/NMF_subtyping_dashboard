@@ -107,6 +107,22 @@ export interface BackwardEliminationResult {
   threshold: number;
 }
 
+export interface ForwardSelectionResult {
+  steps: Array<{
+    step: number;
+    addedCovariate: string | null;
+    addedPValue: number | null;
+    selectedCovariates: string[];
+    modelAIC: number;
+    waldPValue: number;
+    lrtPValue?: number;
+    aicChange?: number;
+  }>;
+  finalCovariates: string[];
+  rejectedCovariates: string[];
+  threshold: number;
+}
+
 /**
  * Estimate hazard ratio from survival curves using
  * the log-log transformation: HR ≈ log(S2) / log(S1) at a reference time
@@ -651,6 +667,9 @@ export function multivariateCoxPH(
   // Approximate log-likelihood
   const logLikelihood = -0.5 * chiSquare;
 
+  // Calculate concordance index (C-statistic)
+  const concordance = calculateConcordanceIndex(survivalData, covariateData, sampleSubtypes, covariateNames);
+
   return {
     covariates,
     waldTest: {
@@ -658,8 +677,118 @@ export function multivariateCoxPH(
       df,
       pValue: waldPValue
     },
-    logLikelihood
+    logLikelihood,
+    concordance
   };
+}
+
+/**
+ * Calculate the concordance index (C-statistic) for a Cox model
+ * C-index measures the probability that predictions and outcomes are concordant
+ * C = 0.5 means random prediction, C = 1.0 means perfect prediction
+ */
+function calculateConcordanceIndex(
+  survivalData: SurvivalData[],
+  covariateData: Record<string, Record<string, string | number>>,
+  sampleSubtypes: Record<string, string>,
+  covariateNames: string[]
+): number {
+  // Get samples with covariate data
+  const samples: { id: string; riskScore: number; subtype: string }[] = [];
+  
+  const allSampleIds = new Set<string>();
+  Object.values(covariateData).forEach(values => {
+    Object.keys(values).forEach(id => allSampleIds.add(id));
+  });
+  
+  allSampleIds.forEach(sampleId => {
+    const subtype = sampleSubtypes[sampleId];
+    if (!subtype) return;
+    
+    // Calculate risk score based on covariates
+    let riskScore = 0;
+    let hasAllCovariates = true;
+    
+    covariateNames.forEach(covariate => {
+      const value = covariateData[covariate]?.[sampleId];
+      if (value === undefined || value === null) {
+        hasAllCovariates = false;
+        return;
+      }
+      
+      // Convert to numeric for risk score
+      const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+      if (!isNaN(numValue)) {
+        riskScore += numValue;
+      } else {
+        // For categorical: use hash to create consistent numeric value
+        riskScore += String(value).length * 0.1;
+      }
+    });
+    
+    if (hasAllCovariates) {
+      samples.push({ id: sampleId, riskScore, subtype });
+    }
+  });
+  
+  if (samples.length < 2) return 0.5;
+  
+  // Get survival ranking from survival data
+  const subtypeMedianSurvival: Record<string, number> = {};
+  survivalData.forEach(group => {
+    const points = group.timePoints.sort((a, b) => a.time - b.time);
+    let median = points[points.length - 1]?.time || 0;
+    for (const p of points) {
+      if (p.survival <= 0.5) {
+        median = p.time;
+        break;
+      }
+    }
+    subtypeMedianSurvival[group.subtype] = median;
+  });
+  
+  // Assign survival rank to each sample based on subtype
+  const samplesWithSurvival = samples.map(s => ({
+    ...s,
+    survivalRank: subtypeMedianSurvival[s.subtype] || 0
+  }));
+  
+  // Count concordant and discordant pairs
+  let concordant = 0;
+  let discordant = 0;
+  let tied = 0;
+  
+  for (let i = 0; i < samplesWithSurvival.length; i++) {
+    for (let j = i + 1; j < samplesWithSurvival.length; j++) {
+      const a = samplesWithSurvival[i];
+      const b = samplesWithSurvival[j];
+      
+      // Skip pairs with same survival
+      if (Math.abs(a.survivalRank - b.survivalRank) < 0.001) {
+        tied++;
+        continue;
+      }
+      
+      // Concordant: higher risk score → lower survival
+      const riskDiff = a.riskScore - b.riskScore;
+      const survivalDiff = a.survivalRank - b.survivalRank;
+      
+      if (riskDiff === 0) {
+        tied++;
+      } else if ((riskDiff > 0 && survivalDiff < 0) || (riskDiff < 0 && survivalDiff > 0)) {
+        concordant++;
+      } else {
+        discordant++;
+      }
+    }
+  }
+  
+  const totalPairs = concordant + discordant + tied;
+  if (totalPairs === 0) return 0.5;
+  
+  // C-index = (concordant + 0.5 * tied) / total
+  const cIndex = (concordant + 0.5 * tied) / totalPairs;
+  return cIndex;
 }
 
 /**
@@ -903,6 +1032,118 @@ export function backwardElimination(
     finalCovariates: currentCovariates,
     significantCovariates,
     removedCovariates,
+    threshold
+  };
+}
+
+/**
+ * Forward selection for multivariate Cox model
+ * Adds covariates one at a time, keeping only those that significantly improve the model
+ */
+export function forwardSelection(
+  survivalData: SurvivalData[],
+  covariateData: Record<string, Record<string, string | number>>,
+  sampleSubtypes: Record<string, string>,
+  candidateCovariates: string[],
+  subtypeCounts?: Record<string, number>,
+  threshold: number = 0.05
+): ForwardSelectionResult {
+  const steps: ForwardSelectionResult['steps'] = [];
+  const selectedCovariates: string[] = [];
+  const rejectedCovariates: string[] = [];
+  let remainingCandidates = [...candidateCovariates];
+  
+  // Step 0: Null model (no covariates)
+  steps.push({
+    step: 0,
+    addedCovariate: null,
+    addedPValue: null,
+    selectedCovariates: [],
+    modelAIC: 0, // Null model baseline
+    waldPValue: 1.0
+  });
+  
+  let previousModel: MultivariateCoxPHResult | null = null;
+  let previousAIC = 0;
+  let stepNumber = 1;
+  
+  while (remainingCandidates.length > 0) {
+    let bestCandidate: string | null = null;
+    let bestPValue = Infinity;
+    let bestModel: MultivariateCoxPHResult | null = null;
+    let bestLRTPValue = Infinity;
+    
+    // Try adding each remaining candidate
+    for (const candidate of remainingCandidates) {
+      const testCovariates = [...selectedCovariates, candidate];
+      const testCovariateData: Record<string, Record<string, string | number>> = {};
+      
+      testCovariates.forEach(cov => {
+        if (covariateData[cov]) {
+          testCovariateData[cov] = covariateData[cov];
+        }
+      });
+      
+      const testModel = multivariateCoxPH(survivalData, testCovariateData, sampleSubtypes, subtypeCounts);
+      
+      if (testModel) {
+        // Get p-value of the newly added covariate
+        const newCovResult = testModel.covariates.find(c => 
+          c.name === candidate || c.name.startsWith(candidate)
+        );
+        
+        if (newCovResult) {
+          // Calculate LRT for this addition
+          const comparison = compareNestedModels(previousModel, testModel);
+          const lrtPValue = comparison?.likelihoodRatioTest.pValue ?? newCovResult.pValue;
+          
+          // Use the minimum of LRT and Wald p-value for selection
+          const selectionPValue = Math.min(lrtPValue, newCovResult.pValue);
+          
+          if (selectionPValue < bestPValue) {
+            bestPValue = selectionPValue;
+            bestCandidate = candidate;
+            bestModel = testModel;
+            bestLRTPValue = lrtPValue;
+          }
+        }
+      }
+    }
+    
+    // If best candidate is significant, add it
+    if (bestCandidate && bestPValue < threshold && bestModel) {
+      selectedCovariates.push(bestCandidate);
+      remainingCandidates = remainingCandidates.filter(c => c !== bestCandidate);
+      
+      const newAIC = bestModel.logLikelihood 
+        ? -2 * bestModel.logLikelihood + 2 * bestModel.covariates.length
+        : 0;
+      
+      steps.push({
+        step: stepNumber,
+        addedCovariate: bestCandidate,
+        addedPValue: bestPValue,
+        selectedCovariates: [...selectedCovariates],
+        modelAIC: newAIC,
+        waldPValue: bestModel.waldTest.pValue,
+        lrtPValue: bestLRTPValue,
+        aicChange: previousAIC - newAIC
+      });
+      
+      previousModel = bestModel;
+      previousAIC = newAIC;
+      stepNumber++;
+    } else {
+      // No more significant candidates - add all remaining to rejected
+      rejectedCovariates.push(...remainingCandidates);
+      break;
+    }
+  }
+  
+  return {
+    steps,
+    finalCovariates: selectedCovariates,
+    rejectedCovariates,
     threshold
   };
 }

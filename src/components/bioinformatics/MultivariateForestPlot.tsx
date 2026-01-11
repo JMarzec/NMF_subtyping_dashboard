@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, Calculator, FileSpreadsheet } from "lucide-react";
+import { Download, Calculator, FileSpreadsheet, Activity } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { formatPValue } from "@/lib/logRankTest";
@@ -174,6 +174,23 @@ export const MultivariateForestPlot = ({ result }: MultivariateForestPlotProps) 
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          
+          {/* Concordance Index */}
+          {result.concordance !== undefined && (
+            <Badge 
+              variant="outline" 
+              className={`text-xs ${
+                result.concordance >= 0.7 
+                  ? 'border-green-500 text-green-700 dark:text-green-400' 
+                  : result.concordance >= 0.6 
+                    ? 'border-yellow-500 text-yellow-700 dark:text-yellow-400'
+                    : ''
+              }`}
+            >
+              <Activity className="h-3 w-3 mr-1" />
+              C: {result.concordance.toFixed(2)}
+            </Badge>
+          )}
           
           {/* P-value type selector */}
           <div className="flex items-center gap-2">
