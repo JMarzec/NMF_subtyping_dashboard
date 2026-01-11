@@ -94,7 +94,7 @@ const Index = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold">NMF Subtyping Dashboard</h1>
-                <p className="text-sm text-muted-foreground">{data.summary.dataset} Molecular Subtypes</p>
+                <p className="text-sm text-muted-foreground">Molecular Subtypes Analysis</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
