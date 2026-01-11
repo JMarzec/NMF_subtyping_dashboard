@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Check, AlertCircle, X } from "lucide-react";
+import { Upload, FileText, Check, AlertCircle, X, Download } from "lucide-react";
 
 export interface AnnotationData {
   sampleColumn: string;
@@ -117,10 +117,23 @@ export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds }: Annotation
   return (
     <Card className="border-dashed">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <FileText className="h-4 w-4 text-primary" />
-          Sample Annotations
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-4 w-4 text-primary" />
+            Sample Annotations
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-[10px] gap-1 px-2"
+            asChild
+          >
+            <a href="/examples/example-annotations.tsv" download>
+              <Download className="h-3 w-3" />
+              Example
+            </a>
+          </Button>
+        </div>
         <CardDescription className="text-xs">
           Optional: upload sample metadata
         </CardDescription>

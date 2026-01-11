@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileJson, Check, AlertCircle } from "lucide-react";
+import { Upload, FileJson, Check, AlertCircle, Download } from "lucide-react";
 import { NmfSummary, SampleResult, MarkerGene, RankMetric, SurvivalDataPoint } from "@/data/mockNmfData";
 
 export interface NmfData {
@@ -138,10 +138,23 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
   return (
     <Card className="border-dashed">
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <FileJson className="h-5 w-5 text-primary" />
-          Import NMF Results
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <FileJson className="h-5 w-5 text-primary" />
+            Import NMF Results
+          </CardTitle>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            asChild
+          >
+            <a href="/examples/example-nmf-results.json" download>
+              <Download className="h-3 w-3" />
+              Example
+            </a>
+          </Button>
+        </div>
         <CardDescription>
           Upload JSON output from R pipeline
         </CardDescription>
