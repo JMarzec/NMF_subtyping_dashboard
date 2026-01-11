@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Download, Database, Calculator } from "lucide-react";
+import { Download, Database, Calculator, FileSpreadsheet } from "lucide-react";
 import { useMemo, useRef } from "react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { formatPValue } from "@/lib/logRankTest";
@@ -38,6 +38,48 @@ export const ForestPlot = ({
 
   const handleDownloadSVG = () => {
     downloadRechartsAsSVG(chartRef.current, "forest-plot");
+  };
+
+  // Export forest plot data as CSV/TSV
+  const exportForestPlotData = (format: 'csv' | 'tsv') => {
+    const separator = format === 'csv' ? ',' : '\t';
+    const lines: string[] = [];
+    
+    // Header
+    lines.push(['Subtype', 'Hazard Ratio', 'Lower 95% CI', 'Upper 95% CI', 'P-value', 'Significant', 'Data Source'].join(separator));
+    
+    // Reference group
+    lines.push([
+      referenceGroup,
+      '1.00',
+      '-',
+      '-',
+      '-',
+      '-',
+      isPrecomputed ? 'R (pre-computed)' : 'Estimated'
+    ].join(separator));
+    
+    // Comparison groups
+    groups.forEach(g => {
+      lines.push([
+        g.subtype,
+        g.hazardRatio.toFixed(4),
+        g.lowerCI.toFixed(4),
+        g.upperCI.toFixed(4),
+        g.pValue.toExponential(4),
+        g.pValue < 0.05 ? 'Yes' : 'No',
+        isPrecomputed ? 'R (pre-computed)' : 'Estimated'
+      ].join(separator));
+    });
+    
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: format === 'csv' ? 'text/csv' : 'text/tab-separated-values' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `forest-plot-data.${format}`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Calculate the range for the plot
@@ -115,7 +157,15 @@ export const ForestPlot = ({
             </Tooltip>
           </TooltipProvider>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={() => exportForestPlotData('csv')}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exportForestPlotData('tsv')}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            TSV
+          </Button>
           <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
             <Download className="h-4 w-4 mr-1" />
             PNG

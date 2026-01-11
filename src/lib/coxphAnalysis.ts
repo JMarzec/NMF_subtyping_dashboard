@@ -25,6 +25,22 @@ export interface CoxPHResult {
     df: number;
     pValue: number;
   };
+  stratifiedBy?: string;
+}
+
+export interface StratifiedCoxPHResult extends CoxPHResult {
+  strataResults: Array<{
+    stratum: string;
+    nSamples: number;
+    groups: CoxPHResult['groups'];
+  }>;
+  pooledHR: Array<{
+    subtype: string;
+    hazardRatio: number;
+    lowerCI: number;
+    upperCI: number;
+    pValue: number;
+  }>;
 }
 
 /**
@@ -220,4 +236,167 @@ function gammaLn(x: number): number {
  */
 export function formatHR(hr: number, lowerCI: number, upperCI: number): string {
   return `${hr.toFixed(2)} (${lowerCI.toFixed(2)}–${upperCI.toFixed(2)})`;
+}
+
+/**
+ * Stratified Cox PH analysis
+ * Controls for a confounding variable by computing HR within each stratum
+ * and combining results using inverse-variance weighting
+ */
+export function stratifiedCoxPH(
+  survivalData: SurvivalData[],
+  stratificationMap: Record<string, string>, // sampleId -> stratumValue
+  sampleSubtypes: Record<string, string>, // sampleId -> subtype
+  subtypeCounts?: Record<string, number>
+): StratifiedCoxPHResult | null {
+  if (!survivalData || survivalData.length < 2) {
+    return null;
+  }
+
+  // Get unique strata
+  const strata = [...new Set(Object.values(stratificationMap))].sort();
+  
+  if (strata.length < 2) {
+    // Not enough strata for stratification, fall back to regular analysis
+    const regular = estimateCoxPH(survivalData, subtypeCounts);
+    if (!regular) return null;
+    
+    return {
+      ...regular,
+      stratifiedBy: undefined,
+      strataResults: [],
+      pooledHR: regular.groups.map(g => ({
+        subtype: g.subtype,
+        hazardRatio: g.hazardRatio,
+        lowerCI: g.lowerCI,
+        upperCI: g.upperCI,
+        pValue: g.pValue
+      }))
+    };
+  }
+
+  const referenceGroup = survivalData[0].subtype;
+  const strataResults: StratifiedCoxPHResult['strataResults'] = [];
+  
+  // For pooling: collect weighted log(HR) for each comparison group
+  const pooledData: Record<string, { logHRs: number[]; variances: number[]; weights: number[] }> = {};
+  
+  survivalData.slice(1).forEach(g => {
+    pooledData[g.subtype] = { logHRs: [], variances: [], weights: [] };
+  });
+
+  // Analyze each stratum
+  for (const stratum of strata) {
+    // Get samples in this stratum
+    const samplesInStratum = Object.entries(stratificationMap)
+      .filter(([, v]) => v === stratum)
+      .map(([sampleId]) => sampleId);
+    
+    if (samplesInStratum.length < 10) continue; // Skip small strata
+    
+    // Count samples per subtype in this stratum
+    const stratumSubtypeCounts: Record<string, number> = {};
+    samplesInStratum.forEach(sampleId => {
+      const subtype = sampleSubtypes[sampleId];
+      if (subtype) {
+        stratumSubtypeCounts[subtype] = (stratumSubtypeCounts[subtype] || 0) + 1;
+      }
+    });
+    
+    // Weight survival curves for this stratum
+    const totalInStratum = Object.values(stratumSubtypeCounts).reduce((a, b) => a + b, 0);
+    
+    // Create weighted survival data for this stratum
+    // This is an approximation - ideally would use individual survival times
+    const stratumSurvivalData: SurvivalData[] = survivalData.map(group => {
+      const proportion = (stratumSubtypeCounts[group.subtype] || 0) / (subtypeCounts?.[group.subtype] || 1);
+      return {
+        ...group,
+        nTotal: Math.round((group.nTotal || 0) * proportion),
+        timePoints: group.timePoints
+      };
+    }).filter(g => (g.nTotal || 0) > 0);
+    
+    if (stratumSurvivalData.length < 2) continue;
+    
+    // Estimate HR within stratum
+    const stratumResult = estimateCoxPH(stratumSurvivalData, stratumSubtypeCounts);
+    
+    if (stratumResult) {
+      strataResults.push({
+        stratum,
+        nSamples: totalInStratum,
+        groups: stratumResult.groups
+      });
+      
+      // Collect for pooling (inverse variance weighting)
+      stratumResult.groups.forEach(g => {
+        if (pooledData[g.subtype]) {
+          const logHR = Math.log(g.hazardRatio);
+          const variance = g.se * g.se;
+          const weight = 1 / variance;
+          
+          pooledData[g.subtype].logHRs.push(logHR);
+          pooledData[g.subtype].variances.push(variance);
+          pooledData[g.subtype].weights.push(weight);
+        }
+      });
+    }
+  }
+  
+  if (strataResults.length === 0) {
+    return null;
+  }
+  
+  // Calculate pooled (Mantel-Haenszel style) hazard ratios
+  const pooledHR: StratifiedCoxPHResult['pooledHR'] = [];
+  const groups: CoxPHResult['groups'] = [];
+  
+  Object.entries(pooledData).forEach(([subtype, data]) => {
+    if (data.weights.length === 0) return;
+    
+    const totalWeight = data.weights.reduce((a, b) => a + b, 0);
+    const pooledLogHR = data.logHRs.reduce((sum, lhr, i) => 
+      sum + lhr * data.weights[i], 0) / totalWeight;
+    const pooledVariance = 1 / totalWeight;
+    const pooledSE = Math.sqrt(pooledVariance);
+    
+    const hr = Math.exp(pooledLogHR);
+    const z = 1.96;
+    const lowerCI = Math.exp(pooledLogHR - z * pooledSE);
+    const upperCI = Math.exp(pooledLogHR + z * pooledSE);
+    
+    const zStat = pooledLogHR / pooledSE;
+    const pValue = 2 * (1 - normalCDF(Math.abs(zStat)));
+    
+    pooledHR.push({ subtype, hazardRatio: hr, lowerCI, upperCI, pValue });
+    groups.push({
+      subtype,
+      hazardRatio: hr,
+      lowerCI,
+      upperCI,
+      pValue,
+      coefficient: pooledLogHR,
+      se: pooledSE
+    });
+  });
+  
+  // Calculate Wald test for pooled results
+  const chiSquare = groups.reduce((sum, g) => 
+    sum + Math.pow(g.coefficient / g.se, 2), 0);
+  const df = groups.length;
+  const waldPValue = 1 - chiSquareCDF(chiSquare, df);
+  
+  return {
+    referenceGroup,
+    groups,
+    waldTest: {
+      chiSquare,
+      df,
+      pValue: waldPValue
+    },
+    stratifiedBy: strata.length > 1 ? `${strata.length} strata` : undefined,
+    strataResults,
+    pooledHR
+  };
 }

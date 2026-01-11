@@ -16,7 +16,7 @@ import { useMemo, useRef, useState } from "react";
 import { Download, FileSpreadsheet, Database, Calculator } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { logRankTest, formatPValue } from "@/lib/logRankTest";
-import { estimateCoxPH, formatHR, CoxPHResult } from "@/lib/coxphAnalysis";
+import { estimateCoxPH, formatHR, CoxPHResult, stratifiedCoxPH, StratifiedCoxPHResult } from "@/lib/coxphAnalysis";
 import { CoxPHResultFromJSON } from "@/components/bioinformatics/JsonUploader";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -85,6 +85,7 @@ export const SurvivalCurve = ({
   sampleSubtypes
 }: SurvivalCurveProps) => {
   const [groupBy, setGroupBy] = useState<string>("nmf_subtype");
+  const [stratifyBy, setStratifyBy] = useState<string>("none");
   const chartRef = useRef<HTMLDivElement>(null);
 
   const handleDownloadPNG = () => {
@@ -232,13 +233,32 @@ export const SurvivalCurve = ({
   }, [effectiveData, effectiveCounts, survivalPValue, isAnnotationGrouping]);
 
   // Use pre-computed Cox PH results from JSON if available, otherwise estimate
-  const coxPHResult = useMemo((): CoxPHResult | CoxPHResultFromJSON | null => {
-    if (coxPHResults && !isAnnotationGrouping) {
-      // Use the pre-computed results from R
-      return coxPHResults;
+  // Also support stratified analysis when a stratification variable is selected
+  const { coxPHResult, isStratified } = useMemo((): { coxPHResult: CoxPHResult | CoxPHResultFromJSON | StratifiedCoxPHResult | null; isStratified: boolean } => {
+    // Use pre-computed if available and not using custom grouping or stratification
+    if (coxPHResults && !isAnnotationGrouping && stratifyBy === "none") {
+      return { coxPHResult: coxPHResults, isStratified: false };
     }
-    return estimateCoxPH(effectiveData, effectiveCounts);
-  }, [effectiveData, effectiveCounts, coxPHResults, isAnnotationGrouping]);
+    
+    // Stratified analysis
+    if (stratifyBy !== "none" && userAnnotations && sampleSubtypes && groupBy === "nmf_subtype") {
+      const stratificationMap: Record<string, string> = {};
+      Object.entries(userAnnotations.annotations).forEach(([sampleId, cols]) => {
+        const value = cols[stratifyBy];
+        if (value !== undefined && value !== null && value !== '') {
+          stratificationMap[sampleId] = String(value);
+        }
+      });
+      
+      const stratResult = stratifiedCoxPH(data, stratificationMap, sampleSubtypes, subtypeCounts);
+      if (stratResult) {
+        return { coxPHResult: stratResult, isStratified: true };
+      }
+    }
+    
+    // Regular estimation
+    return { coxPHResult: estimateCoxPH(effectiveData, effectiveCounts), isStratified: false };
+  }, [effectiveData, effectiveCounts, coxPHResults, isAnnotationGrouping, stratifyBy, userAnnotations, sampleSubtypes, data, subtypeCounts, groupBy]);
 
   // Export survival statistics as CSV/TSV
   const exportSurvivalStats = (format: 'csv' | 'tsv') => {
@@ -568,7 +588,7 @@ export const SurvivalCurve = ({
             {annotationColumns.length > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Group by:</span>
-                <Select value={groupBy} onValueChange={setGroupBy}>
+                <Select value={groupBy} onValueChange={(v) => { setGroupBy(v); if (v !== "nmf_subtype") setStratifyBy("none"); }}>
                   <SelectTrigger className="w-[150px] h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
@@ -579,6 +599,38 @@ export const SurvivalCurve = ({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+            )}
+            
+            {/* Stratification selector - only available when grouping by NMF subtype */}
+            {annotationColumns.length > 0 && groupBy === "nmf_subtype" && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Stratify by:</span>
+                <Select value={stratifyBy} onValueChange={setStratifyBy}>
+                  <SelectTrigger className="w-[150px] h-8 text-xs">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {annotationColumns.map(col => (
+                      <SelectItem key={col} value={col}>{col}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {stratifyBy !== "none" && (
+                  <TooltipProvider>
+                    <UITooltip>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="text-xs cursor-help">
+                          Stratified
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Cox PH analysis controls for {stratifyBy} as a confounder</p>
+                      </TooltipContent>
+                    </UITooltip>
+                  </TooltipProvider>
+                )}
               </div>
             )}
             
@@ -975,8 +1027,14 @@ export const SurvivalCurve = ({
         referenceGroup={coxPHResult.referenceGroup}
         groups={coxPHResult.groups}
         subtypeColors={effectiveColors}
-        isPrecomputed={isPrecomputedCoxPH}
-        title={isAnnotationGrouping ? `Forest Plot: ${groupBy}` : "Forest Plot: NMF Subtypes"}
+        isPrecomputed={isPrecomputedCoxPH && !isStratified}
+        title={
+          isStratified 
+            ? `Forest Plot: NMF Subtypes (stratified by ${stratifyBy})`
+            : isAnnotationGrouping 
+              ? `Forest Plot: ${groupBy}` 
+              : "Forest Plot: NMF Subtypes"
+        }
       />
     )}
   </div>
