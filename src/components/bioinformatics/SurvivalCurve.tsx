@@ -674,24 +674,24 @@ export const SurvivalCurve = ({
                 <UITooltip>
                   <TooltipTrigger asChild>
                     <div className="flex items-center gap-2 px-2 py-1 border rounded-md cursor-help">
-                      <span className="text-xs text-muted-foreground">Covariates:</span>
-                      <div className="flex flex-wrap gap-1 max-w-[200px]">
-                        {annotationColumns.slice(0, 4).map(col => (
-                          <div key={col} className="flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">Covariates:</span>
+                      <div className="flex flex-wrap gap-1 max-w-[350px] max-h-[80px] overflow-y-auto">
+                        {annotationColumns.map(col => (
+                          <div key={col} className="flex items-center gap-1 shrink-0">
                             <Checkbox
                               id={`cov-${col}`}
                               checked={selectedCovariates.includes(col)}
                               onCheckedChange={() => toggleCovariate(col)}
                               className="h-3 w-3"
                             />
-                            <label htmlFor={`cov-${col}`} className="text-xs cursor-pointer">
-                              {col.length > 8 ? `${col.slice(0, 8)}...` : col}
+                            <label htmlFor={`cov-${col}`} className="text-xs cursor-pointer whitespace-nowrap">
+                              {col.length > 12 ? `${col.slice(0, 12)}...` : col}
                             </label>
                           </div>
                         ))}
                       </div>
                       {selectedCovariates.length > 0 && (
-                        <Badge variant="outline" className="text-xs">
+                        <Badge variant="outline" className="text-xs shrink-0">
                           {selectedCovariates.length}
                         </Badge>
                       )}

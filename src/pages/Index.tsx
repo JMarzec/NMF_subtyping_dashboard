@@ -1,13 +1,12 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { SummaryCards } from "@/components/bioinformatics/SummaryCards";
-import { SubtypeDistribution } from "@/components/bioinformatics/SubtypeDistribution";
 import { ClusterScatter } from "@/components/bioinformatics/ClusterScatter";
 import { PCAScatter } from "@/components/bioinformatics/PCAScatter";
 import { PCAScreePlot } from "@/components/bioinformatics/PCAScreePlot";
 import { ClusteringMetrics } from "@/components/bioinformatics/ClusteringMetrics";
 import { ExpressionHeatmap, ExpressionHeatmapRef } from "@/components/bioinformatics/ExpressionHeatmap";
 import { MarkerGenesTable } from "@/components/bioinformatics/MarkerGenesTable";
-import { CopheneticPlot } from "@/components/bioinformatics/CopheneticPlot";
+import { NmfOverviewPanel } from "@/components/bioinformatics/NmfOverviewPanel";
 import { JsonUploader, NmfData } from "@/components/bioinformatics/JsonUploader";
 import { AnnotationUploader, AnnotationData } from "@/components/bioinformatics/AnnotationUploader";
 import { SurvivalCurve } from "@/components/bioinformatics/SurvivalCurve";
@@ -48,13 +47,12 @@ const Index = () => {
 
   // Chart refs for batch export
   const summaryRef = useRef<HTMLDivElement>(null);
-  const subtypeDistRef = useRef<HTMLDivElement>(null);
+  const nmfOverviewRef = useRef<HTMLDivElement>(null);
   const clusterScatterRef = useRef<HTMLDivElement>(null);
   const pcaScatterRef = useRef<HTMLDivElement>(null);
   const pcaScreeRef = useRef<HTMLDivElement>(null);
   const heatmapRef = useRef<HTMLDivElement>(null);
   const heatmapComponentRef = useRef<ExpressionHeatmapRef>(null);
-  const copheneticRef = useRef<HTMLDivElement>(null);
   const survivalRef = useRef<HTMLDivElement>(null);
 
   const handleGlobalResetFilters = useCallback(() => {
@@ -80,7 +78,7 @@ const Index = () => {
 
   const getChartRefs = useCallback((): ChartRef[] => [
     { id: 'summary', name: 'summary-cards', ref: summaryRef.current, type: 'cards' },
-    { id: 'subtype', name: 'subtype-distribution', ref: subtypeDistRef.current, type: 'recharts' },
+    { id: 'nmf-overview', name: 'nmf-overview', ref: nmfOverviewRef.current, type: 'recharts' },
     { id: 'cluster', name: 'umap-cluster', ref: clusterScatterRef.current, type: 'recharts' },
     { id: 'pca', name: 'pca-scatter', ref: pcaScatterRef.current, type: 'recharts' },
     { id: 'scree', name: 'pca-scree', ref: pcaScreeRef.current, type: 'recharts' },
@@ -92,7 +90,6 @@ const Index = () => {
       pngOptions: { paddingRight: 100, paddingBottom: 140 },
       getSVGString: () => heatmapComponentRef.current?.getSVGString() || null
     },
-    { id: 'cophenetic', name: 'cophenetic-plot', ref: copheneticRef.current, type: 'recharts' },
     { id: 'survival', name: 'survival-curve', ref: survivalRef.current, type: 'recharts' },
   ], []);
 
@@ -216,7 +213,15 @@ const Index = () => {
           />
         </div>
 
-        {/* Note: Subtype Distribution moved below Cophenetic Plot */}
+        {/* NMF Overview Panel (Rank Selection + Subtype Distribution) */}
+        <div ref={nmfOverviewRef}>
+          <NmfOverviewPanel 
+            rankMetrics={data.rankMetrics}
+            optimalRank={data.summary.optimal_rank}
+            subtypeCounts={data.summary.subtype_counts}
+            subtypeColors={subtypeColors}
+          />
+        </div>
 
         {/* UMAP Cluster - Full Width */}
         <div ref={clusterScatterRef}>
@@ -255,19 +260,6 @@ const Index = () => {
             markerGenesPerSubtype={markerGenesPerSubtype}
             markerGenes={data.markerGenes}
           />
-        </div>
-
-        {/* Cophenetic Plot (NMF Rank Selection) - Full Width */}
-        <div ref={copheneticRef}>
-          <CopheneticPlot 
-            rankMetrics={data.rankMetrics} 
-            optimalRank={data.summary.optimal_rank} 
-          />
-        </div>
-
-        {/* Subtype Distribution - Full Width */}
-        <div ref={subtypeDistRef}>
-          <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} subtypeColors={subtypeColors} />
         </div>
 
         {/* Clustering Metrics - Full Width */}
