@@ -117,83 +117,81 @@ const Index = () => {
       </header>
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 space-y-6">
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* Upload Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-1 space-y-4">
-            <JsonUploader onDataLoaded={setData} />
-            <AnnotationUploader 
-              onAnnotationLoaded={handleAnnotationLoaded} 
-              sampleIds={sampleIds}
-            />
-          </div>
-          <div className="lg:col-span-3" ref={summaryRef}>
-            <SummaryCards summary={data.summary} />
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <JsonUploader onDataLoaded={setData} />
+          <AnnotationUploader 
+            onAnnotationLoaded={handleAnnotationLoaded} 
+            sampleIds={sampleIds}
+          />
         </div>
 
-        {/* Charts Row 1 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div ref={subtypeDistRef}>
-            <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} subtypeColors={subtypeColors} />
-          </div>
-          <div ref={clusterScatterRef}>
-            <ClusterScatter 
-              samples={data.samples} 
-              subtypeColors={subtypeColors} 
-              userAnnotations={userAnnotations}
-              filterResetKey={filterResetKey}
-            />
-          </div>
-          <div className="space-y-4">
-            <div ref={pcaScatterRef}>
-              <PCAScatter 
-                samples={data.samples} 
-                subtypeColors={subtypeColors} 
-                userAnnotations={userAnnotations}
-                heatmapData={heatmapData}
-                filterResetKey={filterResetKey}
-              />
-            </div>
-            <div ref={pcaScreeRef}>
-              <PCAScreePlot heatmapData={heatmapData} samples={data.samples} />
-            </div>
-          </div>
+        {/* Summary Cards - Full Width */}
+        <div ref={summaryRef}>
+          <SummaryCards summary={data.summary} />
         </div>
 
-        {/* Charts Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2" ref={heatmapRef}>
-            <ExpressionHeatmap 
-              ref={heatmapComponentRef}
-              data={heatmapData} 
-              subtypeColors={subtypeColors} 
-              userAnnotations={userAnnotations}
-              filterResetKey={filterResetKey}
-            />
-          </div>
-          <div className="space-y-6">
-            <div ref={copheneticRef}>
-              <CopheneticPlot 
-                rankMetrics={data.rankMetrics} 
-                optimalRank={data.summary.optimal_rank} 
-              />
-            </div>
-            <ClusteringMetrics samples={data.samples} />
-          </div>
+        {/* Subtype Distribution - Full Width */}
+        <div ref={subtypeDistRef}>
+          <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} subtypeColors={subtypeColors} />
         </div>
 
-        {/* Survival Analysis Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div ref={survivalRef}>
-            <SurvivalCurve data={data.survivalData || []} subtypeColors={subtypeColors} />
-          </div>
+        {/* UMAP Cluster - Full Width */}
+        <div ref={clusterScatterRef}>
+          <ClusterScatter 
+            samples={data.samples} 
+            subtypeColors={subtypeColors} 
+            userAnnotations={userAnnotations}
+            filterResetKey={filterResetKey}
+          />
         </div>
 
-        {/* Marker Genes */}
-        <div className="grid grid-cols-1 gap-6">
-          <MarkerGenesTable genes={data.markerGenes} subtypeColors={subtypeColors} />
+        {/* PCA Scatter - Full Width */}
+        <div ref={pcaScatterRef}>
+          <PCAScatter 
+            samples={data.samples} 
+            subtypeColors={subtypeColors} 
+            userAnnotations={userAnnotations}
+            heatmapData={heatmapData}
+            filterResetKey={filterResetKey}
+          />
         </div>
+
+        {/* PCA Scree Plot - Full Width */}
+        <div ref={pcaScreeRef}>
+          <PCAScreePlot heatmapData={heatmapData} samples={data.samples} />
+        </div>
+
+        {/* Expression Heatmap - Full Width */}
+        <div ref={heatmapRef}>
+          <ExpressionHeatmap 
+            ref={heatmapComponentRef}
+            data={heatmapData} 
+            subtypeColors={subtypeColors} 
+            userAnnotations={userAnnotations}
+            filterResetKey={filterResetKey}
+          />
+        </div>
+
+        {/* Cophenetic Plot - Full Width */}
+        <div ref={copheneticRef}>
+          <CopheneticPlot 
+            rankMetrics={data.rankMetrics} 
+            optimalRank={data.summary.optimal_rank} 
+          />
+        </div>
+
+        {/* Clustering Metrics - Full Width */}
+        <ClusteringMetrics samples={data.samples} />
+
+        {/* Survival Curve - Full Width */}
+        <div ref={survivalRef}>
+          <SurvivalCurve data={data.survivalData || []} subtypeColors={subtypeColors} />
+        </div>
+
+        {/* Marker Genes - Full Width */}
+        <MarkerGenesTable genes={data.markerGenes} subtypeColors={subtypeColors} />
       </main>
 
       {/* Footer */}
