@@ -1,0 +1,104 @@
+{
+  "summary": {
+    "dataset": "GSE62254",
+    "n_samples": 300,
+    "n_genes": 5000,
+    "n_subtypes": 4,
+    "subtype_counts": {
+      "Subtype_1": 78,
+      "Subtype_2": 65,
+      "Subtype_3": 89,
+      "Subtype_4": 68
+    },
+    "cophenetic_correlation": 0.987,
+    "silhouette_mean": 0.72,
+    "optimal_rank": 4
+  },
+  "sampleResults": [
+    {"sample_id": "GSM1523700", "subtype": "Subtype_1", "score_subtype_1": 0.85, "score_subtype_2": 0.12, "score_subtype_3": 0.08, "score_subtype_4": 0.15},
+    {"sample_id": "GSM1523701", "subtype": "Subtype_2", "score_subtype_1": 0.10, "score_subtype_2": 0.78, "score_subtype_3": 0.22, "score_subtype_4": 0.18},
+    {"sample_id": "GSM1523702", "subtype": "Subtype_3", "score_subtype_1": 0.15, "score_subtype_2": 0.08, "score_subtype_3": 0.92, "score_subtype_4": 0.05},
+    {"sample_id": "GSM1523703", "subtype": "Subtype_4", "score_subtype_1": 0.08, "score_subtype_2": 0.12, "score_subtype_3": 0.15, "score_subtype_4": 0.88},
+    {"sample_id": "GSM1523704", "subtype": "Subtype_1", "score_subtype_1": 0.91, "score_subtype_2": 0.05, "score_subtype_3": 0.12, "score_subtype_4": 0.08},
+    {"sample_id": "GSM1523705", "subtype": "Subtype_2", "score_subtype_1": 0.18, "score_subtype_2": 0.82, "score_subtype_3": 0.10, "score_subtype_4": 0.22},
+    {"sample_id": "GSM1523706", "subtype": "Subtype_3", "score_subtype_1": 0.22, "score_subtype_2": 0.15, "score_subtype_3": 0.88, "score_subtype_4": 0.12},
+    {"sample_id": "GSM1523707", "subtype": "Subtype_4", "score_subtype_1": 0.12, "score_subtype_2": 0.08, "score_subtype_3": 0.18, "score_subtype_4": 0.95},
+    {"sample_id": "GSM1523708", "subtype": "Subtype_1", "score_subtype_1": 0.78, "score_subtype_2": 0.18, "score_subtype_3": 0.15, "score_subtype_4": 0.10},
+    {"sample_id": "GSM1523709", "subtype": "Subtype_2", "score_subtype_1": 0.15, "score_subtype_2": 0.85, "score_subtype_3": 0.08, "score_subtype_4": 0.20}
+  ],
+  "markerGenes": [
+    {"gene": "MYC", "weight": 0.95, "subtype": "Subtype_1"},
+    {"gene": "CCND1", "weight": 0.88, "subtype": "Subtype_1"},
+    {"gene": "CDK4", "weight": 0.82, "subtype": "Subtype_1"},
+    {"gene": "E2F1", "weight": 0.78, "subtype": "Subtype_1"},
+    {"gene": "AURKA", "weight": 0.72, "subtype": "Subtype_1"},
+    {"gene": "CDH1", "weight": 0.94, "subtype": "Subtype_2"},
+    {"gene": "EPCAM", "weight": 0.87, "subtype": "Subtype_2"},
+    {"gene": "KRT19", "weight": 0.81, "subtype": "Subtype_2"},
+    {"gene": "CLDN4", "weight": 0.75, "subtype": "Subtype_2"},
+    {"gene": "MUC1", "weight": 0.69, "subtype": "Subtype_2"},
+    {"gene": "VIM", "weight": 0.93, "subtype": "Subtype_3"},
+    {"gene": "SNAI1", "weight": 0.86, "subtype": "Subtype_3"},
+    {"gene": "ZEB1", "weight": 0.80, "subtype": "Subtype_3"},
+    {"gene": "TWIST1", "weight": 0.74, "subtype": "Subtype_3"},
+    {"gene": "FN1", "weight": 0.68, "subtype": "Subtype_3"},
+    {"gene": "PTPRC", "weight": 0.92, "subtype": "Subtype_4"},
+    {"gene": "CD3D", "weight": 0.85, "subtype": "Subtype_4"},
+    {"gene": "CD8A", "weight": 0.79, "subtype": "Subtype_4"},
+    {"gene": "GZMA", "weight": 0.73, "subtype": "Subtype_4"},
+    {"gene": "PRF1", "weight": 0.67, "subtype": "Subtype_4"}
+  ],
+  "rankMetrics": [
+    {"rank": 2, "cophenetic": 0.912, "silhouette": 0.58},
+    {"rank": 3, "cophenetic": 0.954, "silhouette": 0.65},
+    {"rank": 4, "cophenetic": 0.987, "silhouette": 0.72},
+    {"rank": 5, "cophenetic": 0.965, "silhouette": 0.68},
+    {"rank": 6, "cophenetic": 0.923, "silhouette": 0.61}
+  ],
+  "survivalData": [
+    {
+      "subtype": "Subtype_1",
+      "timePoints": [
+        {"time": 0, "survival": 1.0},
+        {"time": 12, "survival": 0.85},
+        {"time": 24, "survival": 0.72},
+        {"time": 36, "survival": 0.58},
+        {"time": 48, "survival": 0.45},
+        {"time": 60, "survival": 0.35}
+      ]
+    },
+    {
+      "subtype": "Subtype_2",
+      "timePoints": [
+        {"time": 0, "survival": 1.0},
+        {"time": 12, "survival": 0.92},
+        {"time": 24, "survival": 0.84},
+        {"time": 36, "survival": 0.75},
+        {"time": 48, "survival": 0.68},
+        {"time": 60, "survival": 0.62}
+      ]
+    },
+    {
+      "subtype": "Subtype_3",
+      "timePoints": [
+        {"time": 0, "survival": 1.0},
+        {"time": 12, "survival": 0.78},
+        {"time": 24, "survival": 0.55},
+        {"time": 36, "survival": 0.38},
+        {"time": 48, "survival": 0.25},
+        {"time": 60, "survival": 0.18}
+      ]
+    },
+    {
+      "subtype": "Subtype_4",
+      "timePoints": [
+        {"time": 0, "survival": 1.0},
+        {"time": 12, "survival": 0.88},
+        {"time": 24, "survival": 0.76},
+        {"time": 36, "survival": 0.65},
+        {"time": 48, "survival": 0.55},
+        {"time": 60, "survival": 0.48}
+      ]
+    }
+  ]
+}

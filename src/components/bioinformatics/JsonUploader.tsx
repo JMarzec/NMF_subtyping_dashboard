@@ -161,17 +161,30 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
               </Tooltip>
             </TooltipProvider>
           </CardTitle>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
-            asChild
-          >
-            <a href="/examples/example-GSE62254-nmf-results.json" download>
-              <Download className="h-3 w-3" />
-              Example
-            </a>
-          </Button>
+          <div className="flex gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              asChild
+            >
+              <a href="/examples/example-mock-nmf-results.json" download>
+                <Download className="h-3 w-3" />
+                Mock
+              </a>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1"
+              asChild
+            >
+              <a href="/examples/example-GSE62254-nmf-results.json" download>
+                <Download className="h-3 w-3" />
+                GSE62254
+              </a>
+            </Button>
+          </div>
         </div>
         <CardDescription>
           Upload JSON output from R pipeline
