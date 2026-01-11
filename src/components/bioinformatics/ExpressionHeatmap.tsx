@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import React, { useMemo, useState, useRef, useCallback } from "react";
+import React, { useMemo, useState, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { generateSubtypeColors } from "@/data/mockNmfData";
@@ -17,6 +17,10 @@ interface HeatmapData {
   samples: string[];
   sampleSubtypes: string[];
   values: number[][];
+}
+
+export interface ExpressionHeatmapRef {
+  getSVGString: () => string | null;
 }
 
 interface ExpressionHeatmapProps {
@@ -224,7 +228,7 @@ const transpose = (matrix: number[][]): number[][] => {
   return matrix[0].map((_, colIndex) => matrix.map(row => row[colIndex]));
 };
 
-export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations, filterResetKey }: ExpressionHeatmapProps) => {
+export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeatmapProps>(({ data, subtypeColors, userAnnotations, filterResetKey }, ref) => {
   const [hoveredCell, setHoveredCell] = useState<{ gene: string; sample: string; value: number; subtype: string; userAnnotation?: string } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [useZScore, setUseZScore] = useState(false);
@@ -579,8 +583,9 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations, filter
     }
   };
 
-  const handleDownloadSVG = () => {
-    if (!heatmapExportRef.current) return;
+  // Generate SVG string for export (reusable for both download and batch export)
+  const generateSVGString = useCallback((): string | null => {
+    if (!heatmapExportRef.current) return null;
 
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
@@ -852,7 +857,23 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations, filter
     }
 
     const serializer = new XMLSerializer();
-    const svgString = serializer.serializeToString(svg);
+    return serializer.serializeToString(svg);
+  }, [
+    cellWidth, cellHeight, filteredData, showDendrograms, sampleDendrogram, geneDendrogram,
+    sampleClusterMethod, geneClusterMethod, selectedAnnotation, userAnnotations,
+    userAnnotationColors, sortedSampleIndices, sortedGeneIndices, displayValues,
+    minVal, maxVal, subtypeColors, uniqueSubtypes, getDendrogramLines, useZScore
+  ]);
+
+  // Expose getSVGString via ref for batch export
+  useImperativeHandle(ref, () => ({
+    getSVGString: generateSVGString
+  }), [generateSVGString]);
+
+  const handleDownloadSVG = () => {
+    const svgString = generateSVGString();
+    if (!svgString) return;
+
     const blob = new Blob([svgString], { type: "image/svg+xml" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -1217,4 +1238,6 @@ export const ExpressionHeatmap = ({ data, subtypeColors, userAnnotations, filter
       </CardContent>
     </Card>
   );
-};
+});
+
+ExpressionHeatmap.displayName = "ExpressionHeatmap";

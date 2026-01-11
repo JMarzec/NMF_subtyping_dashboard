@@ -117,11 +117,73 @@ export const downloadSVGAsFile = (
   URL.revokeObjectURL(url);
 };
 
+// Apply computed styles inline to SVG elements for proper export
+const applyComputedStylesToSVG = (svgElement: SVGElement): void => {
+  const elements = svgElement.querySelectorAll('*');
+  
+  elements.forEach((el) => {
+    if (el instanceof SVGElement) {
+      const computedStyle = window.getComputedStyle(el);
+      
+      // Apply stroke properties
+      if (el.tagName === 'line' || el.tagName === 'path' || el.tagName === 'polyline' || el.tagName === 'polygon' || el.tagName === 'circle' || el.tagName === 'rect') {
+        const stroke = computedStyle.stroke;
+        const strokeWidth = computedStyle.strokeWidth;
+        const strokeOpacity = computedStyle.strokeOpacity;
+        const strokeDasharray = computedStyle.strokeDasharray;
+        
+        if (stroke && stroke !== 'none') {
+          el.setAttribute('stroke', stroke);
+        }
+        if (strokeWidth) {
+          el.setAttribute('stroke-width', strokeWidth);
+        }
+        if (strokeOpacity && strokeOpacity !== '1') {
+          el.setAttribute('stroke-opacity', strokeOpacity);
+        }
+        if (strokeDasharray && strokeDasharray !== 'none') {
+          el.setAttribute('stroke-dasharray', strokeDasharray);
+        }
+      }
+      
+      // Apply fill properties
+      const fill = computedStyle.fill;
+      if (fill && fill !== 'none') {
+        el.setAttribute('fill', fill);
+      }
+      
+      // Apply text properties
+      if (el.tagName === 'text' || el.tagName === 'tspan') {
+        const fontSize = computedStyle.fontSize;
+        const fontFamily = computedStyle.fontFamily;
+        const fontWeight = computedStyle.fontWeight;
+        const textAnchor = computedStyle.textAnchor;
+        
+        if (fontSize) el.setAttribute('font-size', fontSize);
+        if (fontFamily) el.setAttribute('font-family', fontFamily);
+        if (fontWeight && fontWeight !== 'normal' && fontWeight !== '400') {
+          el.setAttribute('font-weight', fontWeight);
+        }
+        if (textAnchor) el.setAttribute('text-anchor', textAnchor);
+      }
+    }
+  });
+};
+
 // Returns SVG as string for ZIP export
 export const getSVGAsString = (
-  containerElement: HTMLElement | null
+  containerElement: HTMLElement | null,
+  chartType: 'recharts' | 'heatmap' | 'cards' = 'recharts'
 ): string | null => {
   if (!containerElement) return null;
+
+  // For heatmap, look for the custom SVG export button and trigger it programmatically
+  // Or find the heatmap canvas and convert it
+  if (chartType === 'heatmap') {
+    // Heatmaps use a custom SVG generation - we'll return null here
+    // and handle it separately in exportAllAsZip
+    return null;
+  }
 
   // Find the chart SVG specifically - look for Recharts container or the largest SVG
   // Avoid icon SVGs (small, typically in buttons) by checking size and context
@@ -154,11 +216,21 @@ export const getSVGAsString = (
 
   const clonedSvg = chartSvg.cloneNode(true) as SVGElement;
   
-  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  rect.setAttribute('width', '100%');
-  rect.setAttribute('height', '100%');
-  rect.setAttribute('fill', 'white');
-  clonedSvg.insertBefore(rect, clonedSvg.firstChild);
+  // Set proper dimensions
+  const rect = chartSvg.getBoundingClientRect();
+  clonedSvg.setAttribute('width', String(rect.width));
+  clonedSvg.setAttribute('height', String(rect.height));
+  clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  
+  // Apply computed styles to ensure all lines, text, etc. are visible
+  applyComputedStylesToSVG(clonedSvg);
+  
+  // Add white background
+  const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bgRect.setAttribute('width', '100%');
+  bgRect.setAttribute('height', '100%');
+  bgRect.setAttribute('fill', 'white');
+  clonedSvg.insertBefore(bgRect, clonedSvg.firstChild);
 
   const serializer = new XMLSerializer();
   return serializer.serializeToString(clonedSvg);
@@ -178,11 +250,20 @@ export const downloadRechartsAsSVG = (
 
   const clonedSvg = svgElement.cloneNode(true) as SVGElement;
   
-  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  rect.setAttribute('width', '100%');
-  rect.setAttribute('height', '100%');
-  rect.setAttribute('fill', 'white');
-  clonedSvg.insertBefore(rect, clonedSvg.firstChild);
+  // Set proper dimensions
+  const rect = svgElement.getBoundingClientRect();
+  clonedSvg.setAttribute('width', String(rect.width));
+  clonedSvg.setAttribute('height', String(rect.height));
+  clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  
+  // Apply computed styles
+  applyComputedStylesToSVG(clonedSvg);
+  
+  const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  bgRect.setAttribute('width', '100%');
+  bgRect.setAttribute('height', '100%');
+  bgRect.setAttribute('fill', 'white');
+  clonedSvg.insertBefore(bgRect, clonedSvg.firstChild);
 
   downloadSVGAsFile(clonedSvg, filename);
 };
@@ -193,20 +274,37 @@ export interface ChartRef {
   ref: HTMLElement | null;
   type: 'recharts' | 'heatmap' | 'cards';
   pngOptions?: ChartExportOptions;
+  getSVGString?: () => string | null; // Custom SVG generator for heatmap
+}
+
+export interface ExportProgress {
+  current: number;
+  total: number;
+  currentChart: string;
 }
 
 export const exportAllAsZip = async (
   charts: ChartRef[],
   format: 'png' | 'svg',
-  filename: string = 'nmf-visualizations'
+  filename: string = 'nmf-visualizations',
+  onProgress?: (progress: ExportProgress) => void
 ): Promise<void> => {
   const zip = new JSZip();
   const folder = zip.folder(filename);
   
   if (!folder) return;
 
-  for (const chart of charts) {
-    if (!chart.ref) continue;
+  const validCharts = charts.filter(c => c.ref);
+  const total = validCharts.length;
+
+  for (let i = 0; i < validCharts.length; i++) {
+    const chart = validCharts[i];
+    
+    onProgress?.({
+      current: i + 1,
+      total,
+      currentChart: chart.name
+    });
 
     try {
       if (format === 'png') {
@@ -215,9 +313,17 @@ export const exportAllAsZip = async (
           folder.file(`${chart.name}.png`, blob);
         }
       } else {
-        const svgString = getSVGAsString(chart.ref);
-        if (svgString) {
-          folder.file(`${chart.name}.svg`, svgString);
+        // For heatmap, use custom SVG generator if provided
+        if (chart.type === 'heatmap' && chart.getSVGString) {
+          const svgString = chart.getSVGString();
+          if (svgString) {
+            folder.file(`${chart.name}.svg`, svgString);
+          }
+        } else if (chart.type !== 'heatmap') {
+          const svgString = getSVGAsString(chart.ref, chart.type);
+          if (svgString) {
+            folder.file(`${chart.name}.svg`, svgString);
+          }
         }
       }
     } catch (error) {

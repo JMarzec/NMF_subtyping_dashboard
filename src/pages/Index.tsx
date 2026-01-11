@@ -5,7 +5,7 @@ import { ClusterScatter } from "@/components/bioinformatics/ClusterScatter";
 import { PCAScatter } from "@/components/bioinformatics/PCAScatter";
 import { PCAScreePlot } from "@/components/bioinformatics/PCAScreePlot";
 import { ClusteringMetrics } from "@/components/bioinformatics/ClusteringMetrics";
-import { ExpressionHeatmap } from "@/components/bioinformatics/ExpressionHeatmap";
+import { ExpressionHeatmap, ExpressionHeatmapRef } from "@/components/bioinformatics/ExpressionHeatmap";
 import { MarkerGenesTable } from "@/components/bioinformatics/MarkerGenesTable";
 import { CopheneticPlot } from "@/components/bioinformatics/CopheneticPlot";
 import { JsonUploader, NmfData } from "@/components/bioinformatics/JsonUploader";
@@ -47,6 +47,7 @@ const Index = () => {
   const pcaScatterRef = useRef<HTMLDivElement>(null);
   const pcaScreeRef = useRef<HTMLDivElement>(null);
   const heatmapRef = useRef<HTMLDivElement>(null);
+  const heatmapComponentRef = useRef<ExpressionHeatmapRef>(null);
   const copheneticRef = useRef<HTMLDivElement>(null);
   const survivalRef = useRef<HTMLDivElement>(null);
 
@@ -60,7 +61,14 @@ const Index = () => {
     { id: 'cluster', name: 'umap-cluster', ref: clusterScatterRef.current, type: 'recharts' },
     { id: 'pca', name: 'pca-scatter', ref: pcaScatterRef.current, type: 'recharts' },
     { id: 'scree', name: 'pca-scree', ref: pcaScreeRef.current, type: 'recharts' },
-    { id: 'heatmap', name: 'expression-heatmap', ref: heatmapRef.current, type: 'heatmap', pngOptions: { paddingRight: 100, paddingBottom: 140 } },
+    { 
+      id: 'heatmap', 
+      name: 'expression-heatmap', 
+      ref: heatmapRef.current, 
+      type: 'heatmap', 
+      pngOptions: { paddingRight: 100, paddingBottom: 140 },
+      getSVGString: () => heatmapComponentRef.current?.getSVGString() || null
+    },
     { id: 'cophenetic', name: 'cophenetic-plot', ref: copheneticRef.current, type: 'recharts' },
     { id: 'survival', name: 'survival-curve', ref: survivalRef.current, type: 'recharts' },
   ], []);
@@ -157,6 +165,7 @@ const Index = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2" ref={heatmapRef}>
             <ExpressionHeatmap 
+              ref={heatmapComponentRef}
               data={heatmapData} 
               subtypeColors={subtypeColors} 
               userAnnotations={userAnnotations}
