@@ -56,6 +56,8 @@ export interface MultivariateCoxPHResult {
     lowerCI: number;
     upperCI: number;
     pValue: number;
+    pValueBonferroni: number;
+    pValueFDR: number;
     coefficient: number;
     se: number;
   }>;
@@ -531,6 +533,8 @@ export function multivariateCoxPH(
             lowerCI: g.lowerCI,
             upperCI: g.upperCI,
             pValue: g.pValue,
+            pValueBonferroni: g.pValue, // Will be adjusted later
+            pValueFDR: g.pValue, // Will be adjusted later
             coefficient: g.coefficient,
             se: g.se
           });
@@ -567,6 +571,8 @@ export function multivariateCoxPH(
             lowerCI: g.lowerCI,
             upperCI: g.upperCI,
             pValue: g.pValue,
+            pValueBonferroni: g.pValue, // Will be adjusted later
+            pValueFDR: g.pValue, // Will be adjusted later
             coefficient: g.coefficient,
             se: g.se
           });
@@ -577,6 +583,26 @@ export function multivariateCoxPH(
   
   if (covariates.length === 0) {
     return null;
+  }
+  
+  // Calculate adjusted p-values
+  const nTests = covariates.length;
+  
+  // Bonferroni correction
+  covariates.forEach(cov => {
+    cov.pValueBonferroni = Math.min(1, cov.pValue * nTests);
+  });
+  
+  // FDR (Benjamini-Hochberg) correction
+  const sortedByP = [...covariates].sort((a, b) => a.pValue - b.pValue);
+  sortedByP.forEach((cov, i) => {
+    const rank = i + 1;
+    cov.pValueFDR = Math.min(1, (cov.pValue * nTests) / rank);
+  });
+  
+  // Ensure FDR is monotonic (step-up procedure)
+  for (let i = sortedByP.length - 2; i >= 0; i--) {
+    sortedByP[i].pValueFDR = Math.min(sortedByP[i].pValueFDR, sortedByP[i + 1].pValueFDR);
   }
   
   // Calculate overall Wald test

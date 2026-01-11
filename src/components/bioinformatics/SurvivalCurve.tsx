@@ -302,6 +302,10 @@ export const SurvivalCurve = ({
     setSelectedCovariates([]);
   };
 
+  const reorderCovariates = (newOrder: string[]) => {
+    setSelectedCovariates(newOrder);
+  };
+
   // Export survival statistics as CSV/TSV
   const exportSurvivalStats = (format: 'csv' | 'tsv') => {
     const separator = format === 'csv' ? ',' : '\t';
@@ -479,7 +483,10 @@ export const SurvivalCurve = ({
         };
       });
       
-      return { subtype, points: sortedPoints, n };
+      // Find the max time for this subtype (where curve should end)
+      const maxTimeForSubtype = Math.max(...sortedPoints.map(p => p.time));
+      
+      return { subtype, points: sortedPoints, n, maxTime: maxTimeForSubtype };
     });
     
     // Find max time across all subtypes
@@ -500,11 +507,26 @@ export const SurvivalCurve = ({
       lastKnown[g.subtype] = { survival: 1.0, lowerCI: 1.0, upperCI: 1.0, atRisk: g.n };
     });
     
+    // Track max time per subtype to know when to stop each curve
+    const subtypeMaxTimes: Record<string, number> = {};
+    processedData.forEach(g => {
+      subtypeMaxTimes[g.subtype] = g.maxTime;
+    });
+    
     for (let i = 0; i < sortedTimes.length; i++) {
       const time = sortedTimes[i];
-      const point: Record<string, number> = { time };
+      const point: Record<string, number | undefined> = { time };
       
       processedData.forEach(group => {
+        // Only include data for this subtype if time is within its follow-up range
+        if (time > subtypeMaxTimes[group.subtype]) {
+          // Beyond the last data point for this subtype - don't extend the curve
+          point[group.subtype] = undefined;
+          point[`${group.subtype}_upper`] = undefined;
+          point[`${group.subtype}_lower`] = undefined;
+          return;
+        }
+        
         const tp = group.points.find(p => p.time === time);
         if (tp) {
           lastKnown[group.subtype] = { 
@@ -520,7 +542,7 @@ export const SurvivalCurve = ({
         point[`${group.subtype}_lower`] = lowerCI;
       });
       
-      chartPoints.push(point);
+      chartPoints.push(point as Record<string, number>);
     }
     
     // Collect event markers (where survival drops)
@@ -684,6 +706,7 @@ export const SurvivalCurve = ({
                 onToggle={toggleCovariate}
                 onSelectAll={selectAllCovariates}
                 onClearAll={clearAllCovariates}
+                onReorder={reorderCovariates}
               />
             )}
             
@@ -810,7 +833,7 @@ export const SurvivalCurve = ({
                     strokeWidth={0.5}
                     strokeDasharray="2 2"
                     strokeOpacity={0.3}
-                    connectNulls
+                    connectNulls={false}
                     isAnimationActive={false}
                     legendType="none"
                   />
@@ -830,7 +853,7 @@ export const SurvivalCurve = ({
                     strokeDasharray="2 2"
                     strokeOpacity={0.3}
                     dot={false}
-                    connectNulls
+                    connectNulls={false}
                     isAnimationActive={false}
                     legendType="none"
                   />
@@ -925,7 +948,7 @@ export const SurvivalCurve = ({
                     
                     return null;
                   }}
-                  connectNulls
+                  connectNulls={false}
                   name={subtype}
                   isAnimationActive={false}
                 />

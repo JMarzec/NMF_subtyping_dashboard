@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChevronDown, Search, X, CheckSquare, Square } from "lucide-react";
+import { ChevronDown, Search, X, CheckSquare, Square, GripVertical } from "lucide-react";
 
 interface CovariateSelectorProps {
   columns: string[];
@@ -17,6 +17,7 @@ interface CovariateSelectorProps {
   onToggle: (covariate: string) => void;
   onSelectAll: () => void;
   onClearAll: () => void;
+  onReorder?: (newOrder: string[]) => void;
 }
 
 export const CovariateSelector = ({
@@ -25,9 +26,12 @@ export const CovariateSelector = ({
   onToggle,
   onSelectAll,
   onClearAll,
+  onReorder,
 }: CovariateSelectorProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [open, setOpen] = useState(false);
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<string | null>(null);
 
   const filteredColumns = useMemo(() => {
     if (!searchTerm.trim()) return columns;
@@ -36,6 +40,50 @@ export const CovariateSelector = ({
   }, [columns, searchTerm]);
 
   const hasSelection = selectedCovariates.length > 0;
+
+  // Drag and drop handlers for reordering selected covariates
+  const handleDragStart = useCallback((e: React.DragEvent, covariate: string) => {
+    setDraggedItem(covariate);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', covariate);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, covariate: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (covariate !== draggedItem) {
+      setDragOverItem(covariate);
+    }
+  }, [draggedItem]);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverItem(null);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent, targetCovariate: string) => {
+    e.preventDefault();
+    
+    if (draggedItem && draggedItem !== targetCovariate && onReorder) {
+      const newOrder = [...selectedCovariates];
+      const draggedIndex = newOrder.indexOf(draggedItem);
+      const targetIndex = newOrder.indexOf(targetCovariate);
+      
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        // Remove dragged item and insert at target position
+        newOrder.splice(draggedIndex, 1);
+        newOrder.splice(targetIndex, 0, draggedItem);
+        onReorder(newOrder);
+      }
+    }
+    
+    setDraggedItem(null);
+    setDragOverItem(null);
+  }, [draggedItem, selectedCovariates, onReorder]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedItem(null);
+    setDragOverItem(null);
+  }, []);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -56,7 +104,7 @@ export const CovariateSelector = ({
           <ChevronDown className="h-3.5 w-3.5 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start">
+      <PopoverContent className="w-80 p-0" align="start">
         <div className="p-3 border-b">
           <div className="flex items-center gap-2 mb-3">
             <div className="relative flex-1">
@@ -135,7 +183,7 @@ export const CovariateSelector = ({
                   </label>
                   {selectedCovariates.includes(col) && (
                     <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
-                      ✓
+                      #{selectedCovariates.indexOf(col) + 1}
                     </Badge>
                   )}
                 </div>
@@ -146,23 +194,34 @@ export const CovariateSelector = ({
         
         {hasSelection && (
           <div className="p-2 border-t bg-muted/30">
+            <div className="text-[10px] text-muted-foreground mb-1.5 flex items-center gap-1">
+              <GripVertical className="h-3 w-3" />
+              Drag to reorder model entry
+            </div>
             <div className="flex flex-wrap gap-1">
-              {selectedCovariates.slice(0, 5).map(cov => (
+              {selectedCovariates.map((cov, index) => (
                 <Badge
                   key={cov}
-                  variant="secondary"
-                  className="text-[10px] px-1.5 py-0.5 cursor-pointer hover:bg-destructive/20"
-                  onClick={() => onToggle(cov)}
+                  variant={dragOverItem === cov ? "default" : "secondary"}
+                  className={`text-[10px] px-1.5 py-0.5 cursor-grab active:cursor-grabbing transition-all ${
+                    draggedItem === cov ? 'opacity-50' : ''
+                  } ${dragOverItem === cov ? 'ring-2 ring-primary' : ''}`}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, cov)}
+                  onDragOver={(e) => handleDragOver(e, cov)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, cov)}
+                  onDragEnd={handleDragEnd}
                 >
-                  {cov.length > 15 ? `${cov.slice(0, 15)}...` : cov}
-                  <X className="h-2.5 w-2.5 ml-0.5" />
+                  <GripVertical className="h-2.5 w-2.5 mr-0.5 opacity-50" />
+                  <span className="font-medium mr-0.5">{index + 1}.</span>
+                  {cov.length > 12 ? `${cov.slice(0, 12)}...` : cov}
+                  <X 
+                    className="h-2.5 w-2.5 ml-1 hover:text-destructive" 
+                    onClick={(e) => { e.stopPropagation(); onToggle(cov); }}
+                  />
                 </Badge>
               ))}
-              {selectedCovariates.length > 5 && (
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
-                  +{selectedCovariates.length - 5} more
-                </Badge>
-              )}
             </div>
           </div>
         )}
