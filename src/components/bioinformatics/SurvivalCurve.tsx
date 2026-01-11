@@ -24,6 +24,7 @@ import { AnnotationData } from "@/components/bioinformatics/AnnotationUploader";
 import { ForestPlot } from "@/components/bioinformatics/ForestPlot";
 import { StratumResultsTable } from "@/components/bioinformatics/StratumResultsTable";
 import { MultivariateResultsTable } from "@/components/bioinformatics/MultivariateResultsTable";
+import { MultivariateForestPlot } from "@/components/bioinformatics/MultivariateForestPlot";
 import { CovariateSelector } from "@/components/bioinformatics/CovariateSelector";
 
 export interface SurvivalTimePoint {
@@ -1125,7 +1126,10 @@ export const SurvivalCurve = ({
 
     {/* Multivariate Cox Regression Results */}
     {multivariateResult && (
-      <MultivariateResultsTable result={multivariateResult} />
+      <>
+        <MultivariateForestPlot result={multivariateResult} />
+        <MultivariateResultsTable result={multivariateResult} />
+      </>
     )}
   </div>
   );
