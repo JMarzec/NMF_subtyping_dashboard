@@ -20,11 +20,11 @@ import { estimateCoxPH, formatHR, CoxPHResult, stratifiedCoxPH, StratifiedCoxPHR
 import { CoxPHResultFromJSON } from "@/components/bioinformatics/JsonUploader";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { AnnotationData } from "@/components/bioinformatics/AnnotationUploader";
 import { ForestPlot } from "@/components/bioinformatics/ForestPlot";
 import { StratumResultsTable } from "@/components/bioinformatics/StratumResultsTable";
 import { MultivariateResultsTable } from "@/components/bioinformatics/MultivariateResultsTable";
+import { CovariateSelector } from "@/components/bioinformatics/CovariateSelector";
 
 export interface SurvivalTimePoint {
   time: number;
@@ -292,6 +292,14 @@ export const SurvivalCurve = ({
         ? prev.filter(c => c !== covariate)
         : [...prev, covariate]
     );
+  };
+
+  const selectAllCovariates = () => {
+    setSelectedCovariates([...annotationColumns]);
+  };
+
+  const clearAllCovariates = () => {
+    setSelectedCovariates([]);
   };
 
   // Export survival statistics as CSV/TSV
@@ -670,41 +678,13 @@ export const SurvivalCurve = ({
 
             {/* Multivariate Covariates Selector */}
             {annotationColumns.length > 0 && groupBy === "nmf_subtype" && (
-              <TooltipProvider>
-                <UITooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center gap-2 px-2 py-1 border rounded-md cursor-help">
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">Covariates:</span>
-                      <div className="flex flex-wrap gap-1 max-w-[350px] max-h-[80px] overflow-y-auto">
-                        {annotationColumns.map(col => (
-                          <div key={col} className="flex items-center gap-1 shrink-0">
-                            <Checkbox
-                              id={`cov-${col}`}
-                              checked={selectedCovariates.includes(col)}
-                              onCheckedChange={() => toggleCovariate(col)}
-                              className="h-3 w-3"
-                            />
-                            <label htmlFor={`cov-${col}`} className="text-xs cursor-pointer whitespace-nowrap">
-                              {col.length > 12 ? `${col.slice(0, 12)}...` : col}
-                            </label>
-                          </div>
-                        ))}
-                      </div>
-                      {selectedCovariates.length > 0 && (
-                        <Badge variant="outline" className="text-xs shrink-0">
-                          {selectedCovariates.length}
-                        </Badge>
-                      )}
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Select covariates for multivariate Cox regression</p>
-                    {selectedCovariates.length > 0 && (
-                      <p className="text-xs mt-1">Selected: {selectedCovariates.join(', ')}</p>
-                    )}
-                  </TooltipContent>
-                </UITooltip>
-              </TooltipProvider>
+              <CovariateSelector
+                columns={annotationColumns}
+                selectedCovariates={selectedCovariates}
+                onToggle={toggleCovariate}
+                onSelectAll={selectAllCovariates}
+                onClearAll={clearAllCovariates}
+              />
             )}
             
             {logRankResult && (
