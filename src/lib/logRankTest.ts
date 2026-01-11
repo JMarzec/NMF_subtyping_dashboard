@@ -1,175 +1,251 @@
 /**
  * Log-rank test implementation for Kaplan-Meier survival analysis
  * Returns p-value for comparing survival curves between groups
+ * 
+ * Note: This implementation works with pre-computed Kaplan-Meier curves
+ * where we only have (time, survival) points. It estimates the number
+ * of events and at-risk subjects from the survival probabilities.
  */
 
 import { SurvivalData } from "@/components/bioinformatics/SurvivalCurve";
 
-interface SurvivalPoint {
-  time: number;
-  survival: number;
-  subtype: string;
-  atRisk?: number;
-  events?: number;
+/**
+ * Calculate chi-square p-value using Wilson-Hilferty approximation
+ */
+function chiSquarePValue(chiSquare: number, df: number): number {
+  if (df <= 0 || chiSquare < 0) return 1;
+  if (chiSquare === 0) return 1;
+  
+  // For very large chi-square values
+  if (chiSquare > 100) {
+    return 1e-20;
+  }
+
+  // Gamma function approximation using Stirling's formula for large values
+  function gammaLn(x: number): number {
+    const c = [
+      76.18009172947146, -86.50532032941677, 24.01409824083091,
+      -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5
+    ];
+    let y = x;
+    let tmp = x + 5.5;
+    tmp -= (x + 0.5) * Math.log(tmp);
+    let ser = 1.000000000190015;
+    for (let j = 0; j < 6; j++) {
+      ser += c[j] / ++y;
+    }
+    return -tmp + Math.log(2.5066282746310005 * ser / x);
+  }
+
+  // Regularized incomplete gamma function (lower)
+  function gammainc(a: number, x: number): number {
+    if (x < 0 || a <= 0) return 0;
+    if (x === 0) return 0;
+    
+    const gln = gammaLn(a);
+    
+    if (x < a + 1) {
+      // Use series representation
+      let sum = 1 / a;
+      let del = sum;
+      for (let n = 1; n <= 100; n++) {
+        del *= x / (a + n);
+        sum += del;
+        if (Math.abs(del) < Math.abs(sum) * 1e-10) break;
+      }
+      return sum * Math.exp(-x + a * Math.log(x) - gln);
+    } else {
+      // Use continued fraction representation
+      let b = x + 1 - a;
+      let c = 1e30;
+      let d = 1 / b;
+      let h = d;
+      for (let i = 1; i <= 100; i++) {
+        const an = -i * (i - a);
+        b += 2;
+        d = an * d + b;
+        if (Math.abs(d) < 1e-30) d = 1e-30;
+        c = b + an / c;
+        if (Math.abs(c) < 1e-30) c = 1e-30;
+        d = 1 / d;
+        const del = d * c;
+        h *= del;
+        if (Math.abs(del - 1) < 1e-10) break;
+      }
+      return 1 - Math.exp(-x + a * Math.log(x) - gln) * h;
+    }
+  }
+
+  // P-value = 1 - CDF of chi-square = 1 - gammainc(df/2, x/2)
+  const pValue = 1 - gammainc(df / 2, chiSquare / 2);
+  return Math.max(0, Math.min(1, pValue));
 }
 
 /**
- * Calculate chi-square p-value from test statistic
+ * Reconstruct event data from survival curve
+ * Uses the relationship: S(t) = S(t-1) * (1 - d/n)
+ * where d = events at time t, n = at-risk at time t
  */
-function chiSquarePValue(chiSquare: number, degreesOfFreedom: number): number {
-  // Approximation using the regularized incomplete gamma function
-  // For df=1, P(X > x) ≈ 2 * (1 - Φ(sqrt(x))) where Φ is standard normal CDF
-  if (degreesOfFreedom === 1) {
-    const z = Math.sqrt(chiSquare);
-    // Standard normal CDF approximation
-    const a1 = 0.254829592;
-    const a2 = -0.284496736;
-    const a3 = 1.421413741;
-    const a4 = -1.453152027;
-    const a5 = 1.061405429;
-    const p = 0.3275911;
-    const sign = z < 0 ? -1 : 1;
-    const absZ = Math.abs(z);
-    const t = 1.0 / (1.0 + p * absZ);
-    const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-absZ * absZ / 2);
-    const normalCDF = 0.5 * (1.0 + sign * y);
-    return 2 * (1 - normalCDF);
+function reconstructEventData(
+  data: SurvivalData[],
+  subtypeCounts: Record<string, number>
+): Array<{
+  time: number;
+  groups: Array<{
+    subtype: string;
+    atRisk: number;
+    events: number;
+  }>;
+}> {
+  // Get all unique times across all groups
+  const allTimes = new Set<number>();
+  data.forEach(group => {
+    group.timePoints.forEach(tp => allTimes.add(tp.time));
+  });
+  const sortedTimes = Array.from(allTimes).sort((a, b) => a - b);
+  
+  const eventData: Array<{
+    time: number;
+    groups: Array<{ subtype: string; atRisk: number; events: number }>;
+  }> = [];
+
+  // Track state for each group
+  const groupState = new Map<string, { 
+    atRisk: number; 
+    prevSurvival: number;
+    timePointMap: Map<number, number>;
+  }>();
+
+  data.forEach(group => {
+    const initialN = subtypeCounts[group.subtype] || 100;
+    const tpMap = new Map<number, number>();
+    group.timePoints.forEach(tp => {
+      tpMap.set(tp.time, tp.survival);
+    });
+    groupState.set(group.subtype, {
+      atRisk: initialN,
+      prevSurvival: 1.0,
+      timePointMap: tpMap
+    });
+  });
+
+  for (const time of sortedTimes) {
+    if (time === 0) continue; // Skip time 0
+    
+    const groups: Array<{ subtype: string; atRisk: number; events: number }> = [];
+    
+    data.forEach(group => {
+      const state = groupState.get(group.subtype)!;
+      const currentSurvival = state.timePointMap.get(time);
+      
+      let events = 0;
+      if (currentSurvival !== undefined && currentSurvival < state.prevSurvival) {
+        // S(t) = S(t-1) * (1 - d/n)
+        // d = n * (1 - S(t)/S(t-1))
+        const survivalRatio = currentSurvival / state.prevSurvival;
+        events = Math.round(state.atRisk * (1 - survivalRatio));
+        events = Math.max(0, events);
+        
+        state.prevSurvival = currentSurvival;
+        state.atRisk = Math.max(0, state.atRisk - events);
+      }
+      
+      groups.push({
+        subtype: group.subtype,
+        atRisk: state.atRisk + events, // At risk just before event
+        events
+      });
+    });
+    
+    // Only include time points with events
+    if (groups.some(g => g.events > 0)) {
+      eventData.push({ time, groups });
+    }
   }
   
-  // For multiple degrees of freedom, use gamma function approximation
-  // This is a simplified approximation
-  const k = degreesOfFreedom / 2;
-  const x = chiSquare / 2;
-  
-  // Upper incomplete gamma function approximation
-  let sum = 0;
-  let term = 1;
-  for (let i = 0; i < 100; i++) {
-    term *= x / (k + i);
-    sum += term;
-    if (term < 1e-10) break;
-  }
-  
-  const gamma = Math.exp(-x) * Math.pow(x, k) * sum / k;
-  return Math.max(0, Math.min(1, 1 - gamma));
+  return eventData;
+}
+
+export interface LogRankResult {
+  pValue: number;
+  chiSquare: number;
+  degreesOfFreedom: number;
 }
 
 /**
  * Perform log-rank test on survival data
- * Returns p-value and chi-square statistic
+ * Uses the Mantel-Haenszel log-rank test statistic
  */
-export function logRankTest(survivalData: SurvivalData[]): { 
-  pValue: number; 
-  chiSquare: number;
-  degreesOfFreedom: number;
-} | null {
+export function logRankTest(
+  survivalData: SurvivalData[],
+  subtypeCounts?: Record<string, number>
+): LogRankResult | null {
   if (!survivalData || survivalData.length < 2) {
     return null;
   }
 
-  // Get all unique event times across all groups
-  const allTimes = new Set<number>();
+  // Use provided counts or estimate from typical study sizes
+  const counts = subtypeCounts || {};
   survivalData.forEach(group => {
-    group.timePoints.forEach(tp => {
-      allTimes.add(tp.time);
-    });
-  });
-  const sortedTimes = Array.from(allTimes).sort((a, b) => a - b);
-
-  if (sortedTimes.length === 0) return null;
-
-  // For each group, track at-risk counts and events at each time
-  const groupData = survivalData.map(group => {
-    const timePointMap = new Map<number, { survival: number }>();
-    group.timePoints.forEach(tp => {
-      timePointMap.set(tp.time, { survival: tp.survival });
-    });
-    
-    // Calculate events (drops in survival)
-    const events = new Map<number, number>();
-    let prevSurvival = 1.0;
-    
-    for (const time of sortedTimes) {
-      const tp = timePointMap.get(time);
-      if (tp) {
-        // Event occurred if survival dropped
-        const survivalDrop = prevSurvival - tp.survival;
-        if (survivalDrop > 0.001) {
-          // Estimate number of events based on survival drop
-          // Assuming equal risk, events ≈ atRisk * (1 - (survival/prevSurvival))
-          events.set(time, Math.max(1, Math.round(survivalDrop * 100)));
-        }
-        prevSurvival = tp.survival;
-      }
+    if (!counts[group.subtype]) {
+      // Estimate based on common study proportions
+      counts[group.subtype] = 100;
     }
-    
-    return {
-      subtype: group.subtype,
-      timePointMap,
-      events,
-      initialCount: 100, // Assume 100 subjects per group for calculation
-    };
   });
 
-  // Calculate log-rank test statistic
-  let numerator = 0;
-  let denominator = 0;
-
-  // For each time point, calculate O-E (observed - expected)
-  for (const time of sortedTimes) {
-    // Total events at this time
-    let totalEvents = 0;
-    let totalAtRisk = 0;
-    const groupAtRisk: number[] = [];
-    const groupEvents: number[] = [];
-
-    groupData.forEach((group, i) => {
-      // Estimate at-risk count based on survival curve
-      let atRisk = group.initialCount;
-      let lastSurvival = 1.0;
-      for (const [t, data] of group.timePointMap.entries()) {
-        if (t < time) {
-          lastSurvival = data.survival;
-        }
-      }
-      atRisk = Math.round(group.initialCount * lastSurvival);
-      
-      const events = group.events.get(time) || 0;
-      
-      groupAtRisk[i] = atRisk;
-      groupEvents[i] = events;
-      totalEvents += events;
-      totalAtRisk += atRisk;
-    });
-
-    if (totalAtRisk > 0 && totalEvents > 0) {
-      // For each group except the last (since they sum to 0)
-      for (let i = 0; i < groupData.length - 1; i++) {
-        const observed = groupEvents[i];
-        const expected = (groupAtRisk[i] / totalAtRisk) * totalEvents;
-        const variance = totalAtRisk > 1 
-          ? (groupAtRisk[i] * (totalAtRisk - groupAtRisk[i]) * totalEvents * (totalAtRisk - totalEvents)) 
-            / (totalAtRisk * totalAtRisk * (totalAtRisk - 1))
-          : 0;
-        
-        numerator += observed - expected;
-        denominator += variance;
-      }
-    }
-  }
-
-  if (denominator <= 0) {
+  // Reconstruct event data from survival curves
+  const eventData = reconstructEventData(survivalData, counts);
+  
+  if (eventData.length === 0) {
     return null;
   }
 
-  const chiSquare = (numerator * numerator) / denominator;
-  const df = survivalData.length - 1;
+  const numGroups = survivalData.length;
+  
+  // Calculate O-E and variance for each group (except last)
+  const observedMinusExpected = new Array(numGroups - 1).fill(0);
+  const variances = new Array(numGroups - 1).fill(0);
+  
+  for (const { groups } of eventData) {
+    const totalEvents = groups.reduce((sum, g) => sum + g.events, 0);
+    const totalAtRisk = groups.reduce((sum, g) => sum + g.atRisk, 0);
+    
+    if (totalAtRisk === 0 || totalEvents === 0) continue;
+    
+    for (let i = 0; i < numGroups - 1; i++) {
+      const observed = groups[i].events;
+      const expected = (groups[i].atRisk / totalAtRisk) * totalEvents;
+      
+      observedMinusExpected[i] += observed - expected;
+      
+      // Variance = n_i * n_j * d * (N - d) / (N^2 * (N - 1))
+      // Simplified for 2 groups
+      if (totalAtRisk > 1) {
+        const n_i = groups[i].atRisk;
+        const n_other = totalAtRisk - n_i;
+        const v = (n_i * n_other * totalEvents * (totalAtRisk - totalEvents)) / 
+                  (totalAtRisk * totalAtRisk * (totalAtRisk - 1));
+        variances[i] += v;
+      }
+    }
+  }
+  
+  // Calculate chi-square statistic
+  // For 2 groups: chi^2 = (O - E)^2 / V
+  let chiSquare = 0;
+  for (let i = 0; i < numGroups - 1; i++) {
+    if (variances[i] > 0) {
+      chiSquare += (observedMinusExpected[i] * observedMinusExpected[i]) / variances[i];
+    }
+  }
+  
+  const df = numGroups - 1;
   const pValue = chiSquarePValue(chiSquare, df);
-
+  
   return {
     pValue,
     chiSquare,
-    degreesOfFreedom: df,
+    degreesOfFreedom: df
   };
 }
 
@@ -178,7 +254,7 @@ export function logRankTest(survivalData: SurvivalData[]): {
  */
 export function formatPValue(pValue: number): string {
   if (pValue < 0.0001) {
-    return "p < 0.0001";
+    return `p < 0.0001`;
   } else if (pValue < 0.001) {
     return `p = ${pValue.toExponential(2)}`;
   } else if (pValue < 0.01) {
@@ -186,4 +262,15 @@ export function formatPValue(pValue: number): string {
   } else {
     return `p = ${pValue.toFixed(3)}`;
   }
+}
+
+/**
+ * Calculate Greenwood's variance for confidence intervals
+ * V(S(t)) = S(t)^2 * Σ d_i / (n_i * (n_i - d_i))
+ */
+export function calculateGreenwoodVariance(
+  survivalValue: number,
+  cumulativeVarianceTerm: number
+): number {
+  return survivalValue * survivalValue * cumulativeVarianceTerm;
 }

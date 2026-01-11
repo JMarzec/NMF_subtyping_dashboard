@@ -266,7 +266,11 @@ const Index = () => {
 
         {/* Survival Curve - Full Width */}
         <div ref={survivalRef}>
-          <SurvivalCurve data={data.survivalData || []} subtypeColors={subtypeColors} />
+          <SurvivalCurve 
+            data={data.survivalData || []} 
+            subtypeColors={subtypeColors}
+            subtypeCounts={data.summary.subtype_counts}
+          />
         </div>
 
         {/* Marker Genes - Full Width */}
