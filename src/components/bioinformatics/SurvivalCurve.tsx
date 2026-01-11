@@ -13,11 +13,12 @@ import {
   Line
 } from "recharts";
 import { useMemo, useRef } from "react";
-import { Download } from "lucide-react";
+import { Download, FileSpreadsheet, Database, Calculator } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { logRankTest, formatPValue } from "@/lib/logRankTest";
 import { estimateCoxPH, formatHR, CoxPHResult } from "@/lib/coxphAnalysis";
 import { CoxPHResultFromJSON } from "@/components/bioinformatics/JsonUploader";
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface SurvivalTimePoint {
   time: number;
@@ -64,6 +65,10 @@ export const SurvivalCurve = ({
     downloadRechartsAsSVG(chartRef.current, "survival-curve");
   };
 
+  // Track data source for statistics
+  const isPrecomputedPValue = survivalPValue !== undefined;
+  const isPrecomputedCoxPH = !!coxPHResults;
+
   // Use pre-computed log-rank p-value from JSON if available, otherwise calculate
   const logRankResult = useMemo(() => {
     if (survivalPValue !== undefined) {
@@ -81,6 +86,86 @@ export const SurvivalCurve = ({
     }
     return estimateCoxPH(data, subtypeCounts);
   }, [data, subtypeCounts, coxPHResults]);
+
+  // Export survival statistics as CSV/TSV
+  const exportSurvivalStats = (format: 'csv' | 'tsv') => {
+    const separator = format === 'csv' ? ',' : '\t';
+    const lines: string[] = [];
+    
+    // Header
+    lines.push(['Statistic', 'Subtype', 'Value', 'Lower CI', 'Upper CI', 'P-value', 'Source'].join(separator));
+    
+    // Log-rank test
+    if (logRankResult) {
+      lines.push([
+        'Log-rank Test',
+        'All groups',
+        logRankResult.chiSquare ? logRankResult.chiSquare.toFixed(4) : 'N/A',
+        'N/A',
+        'N/A',
+        logRankResult.pValue.toExponential(4),
+        isPrecomputedPValue ? 'R (pre-computed)' : 'Estimated'
+      ].join(separator));
+    }
+    
+    // Median survival for each subtype
+    subtypes.forEach(subtype => {
+      const median = medianSurvival[subtype];
+      lines.push([
+        'Median Survival (months)',
+        subtype,
+        median !== null ? median.toFixed(2) : 'Not Reached',
+        'N/A',
+        'N/A',
+        'N/A',
+        'Calculated from curve'
+      ].join(separator));
+    });
+    
+    // Cox PH results
+    if (coxPHResult) {
+      lines.push([
+        'Cox PH Reference Group',
+        coxPHResult.referenceGroup,
+        '1.00',
+        'N/A',
+        'N/A',
+        'N/A',
+        isPrecomputedCoxPH ? 'R (pre-computed)' : 'Estimated'
+      ].join(separator));
+      
+      coxPHResult.groups.forEach(g => {
+        lines.push([
+          'Cox PH Hazard Ratio',
+          g.subtype,
+          g.hazardRatio.toFixed(4),
+          g.lowerCI.toFixed(4),
+          g.upperCI.toFixed(4),
+          g.pValue.toExponential(4),
+          isPrecomputedCoxPH ? 'R (pre-computed)' : 'Estimated'
+        ].join(separator));
+      });
+      
+      lines.push([
+        'Wald Test',
+        'All groups',
+        coxPHResult.waldTest.chiSquare.toFixed(4),
+        'N/A',
+        'N/A',
+        coxPHResult.waldTest.pValue.toExponential(4),
+        isPrecomputedCoxPH ? 'R (pre-computed)' : 'Estimated'
+      ].join(separator));
+    }
+    
+    const content = lines.join('\n');
+    const blob = new Blob([content], { type: format === 'csv' ? 'text/csv' : 'text/tab-separated-values' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `survival-analysis-results.${format}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Calculate median survival for each subtype
   const medianSurvival = useMemo(() => {
@@ -239,18 +324,40 @@ export const SurvivalCurve = ({
       }
     });
     
-    // Collect censoring markers
-    const censors: { time: number; survival: number; subtype: string }[] = [];
+    // Collect censoring markers (including end-of-follow-up without event)
+    const censors: { time: number; survival: number; subtype: string; isEndOfFollowUp?: boolean }[] = [];
     processedData.forEach(group => {
+      const maxTimeForSubtype = Math.max(...group.points.map(p => p.time));
+      
       for (let i = 0; i < group.points.length; i++) {
         const curr = group.points[i];
+        const isLastPoint = i === group.points.length - 1 || curr.time === maxTimeForSubtype;
+        
         // Check if explicitly marked as censored
         if (curr.censored && curr.censored > 0) {
           censors.push({
             time: curr.time,
             survival: curr.survival,
-            subtype: group.subtype
+            subtype: group.subtype,
+            isEndOfFollowUp: isLastPoint && curr.survival > 0
           });
+        }
+        
+        // Also mark end of follow-up if survival > 0 and it's the last point
+        // (indicating participants finished follow-up without event)
+        if (isLastPoint && curr.survival > 0) {
+          // Check if we haven't already added this as a censored point
+          const alreadyAdded = censors.some(
+            c => c.subtype === group.subtype && Math.abs(c.time - curr.time) < 0.01
+          );
+          if (!alreadyAdded) {
+            censors.push({
+              time: curr.time,
+              survival: curr.survival,
+              subtype: group.subtype,
+              isEndOfFollowUp: true
+            });
+          }
         }
       }
     });
@@ -303,15 +410,33 @@ export const SurvivalCurve = ({
         <div className="flex items-center gap-3 flex-wrap">
           <CardTitle className="text-lg">Kaplan-Meier Survival Curves</CardTitle>
           {logRankResult && (
-            <Badge 
-              variant={logRankResult.pValue < 0.05 ? "default" : "secondary"}
-              className={logRankResult.pValue < 0.05 ? "bg-green-600 hover:bg-green-700" : ""}
-            >
-              Log-rank: {formatPValue(logRankResult.pValue)}
-            </Badge>
+            <TooltipProvider>
+              <UITooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant={logRankResult.pValue < 0.05 ? "default" : "secondary"}
+                    className={`cursor-help ${logRankResult.pValue < 0.05 ? "bg-green-600 hover:bg-green-700" : ""}`}
+                  >
+                    {isPrecomputedPValue ? <Database className="h-3 w-3 mr-1" /> : <Calculator className="h-3 w-3 mr-1" />}
+                    Log-rank: {formatPValue(logRankResult.pValue)}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isPrecomputedPValue ? 'Pre-computed from R analysis' : 'Estimated from survival curves'}</p>
+                </TooltipContent>
+              </UITooltip>
+            </TooltipProvider>
           )}
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => exportSurvivalStats('csv')}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exportSurvivalStats('tsv')}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            TSV
+          </Button>
           <Button variant="outline" size="sm" onClick={handleDownloadPNG}>
             <Download className="h-4 w-4 mr-1" />
             PNG
@@ -474,6 +599,38 @@ export const SurvivalCurve = ({
                     }
                     
                     if (isCensor) {
+                      const censorInfo = censorPoints.find(
+                        c => c.subtype === subtype && Math.abs(c.time - time) < 0.01
+                      );
+                      const isEndOfFollowUp = censorInfo?.isEndOfFollowUp;
+                      
+                      // End of follow-up uses a different marker (cross/plus)
+                      if (isEndOfFollowUp) {
+                        return (
+                          <g key={`end-followup-${subtype}-${time}`}>
+                            {/* Vertical line */}
+                            <line
+                              x1={cx}
+                              y1={cy - 6}
+                              x2={cx}
+                              y2={cy + 6}
+                              stroke={color}
+                              strokeWidth={2.5}
+                            />
+                            {/* Horizontal line to form a cross */}
+                            <line
+                              x1={cx - 5}
+                              y1={cy}
+                              x2={cx + 5}
+                              y2={cy}
+                              stroke={color}
+                              strokeWidth={2.5}
+                            />
+                          </g>
+                        );
+                      }
+                      
+                      // Regular censoring marker (vertical tick)
                       return (
                         <g key={`censor-${subtype}-${time}`}>
                           <line
@@ -564,7 +721,22 @@ export const SurvivalCurve = ({
           {/* Cox PH results */}
           {coxPHResult && (
             <div className="border rounded-md p-3 bg-muted/30">
-              <h4 className="text-sm font-semibold mb-2">Cox Proportional Hazards Analysis</h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-sm font-semibold">Cox Proportional Hazards Analysis</h4>
+                <TooltipProvider>
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="cursor-help text-xs">
+                        {isPrecomputedCoxPH ? <Database className="h-3 w-3 mr-1" /> : <Calculator className="h-3 w-3 mr-1" />}
+                        {isPrecomputedCoxPH ? 'R' : 'Est.'}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{isPrecomputedCoxPH ? 'Pre-computed from R analysis' : 'Estimated from survival curves'}</p>
+                    </TooltipContent>
+                  </UITooltip>
+                </TooltipProvider>
+              </div>
               <div className="text-xs text-muted-foreground mb-2">
                 Reference: {coxPHResult.referenceGroup}
               </div>
@@ -596,9 +768,30 @@ export const SurvivalCurve = ({
           )}
         </div>
         
-        <p className="text-xs text-muted-foreground mt-3 text-center">
+        {/* Data source legend */}
+        <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Database className="h-3 w-3" />
+            <span>= Pre-computed (R)</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Calculator className="h-3 w-3" />
+            <span>= Estimated</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="inline-block w-3 h-0.5 bg-current" />
+            <span>| = Censored</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="font-bold">+</span>
+            <span>= End of follow-up</span>
+          </div>
+        </div>
+        
+        <p className="text-xs text-muted-foreground mt-2 text-center">
           Shaded regions show 95% confidence intervals. Dots indicate events (deaths). 
-          Vertical ticks indicate censored observations. Dashed line at 50% indicates median survival.
+          Vertical ticks (|) indicate censored observations. Plus signs (+) indicate end of follow-up without event.
+          Dashed line at 50% indicates median survival.
         </p>
       </CardContent>
     </Card>
