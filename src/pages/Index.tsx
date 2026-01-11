@@ -216,10 +216,7 @@ const Index = () => {
           />
         </div>
 
-        {/* Subtype Distribution - Full Width */}
-        <div ref={subtypeDistRef}>
-          <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} subtypeColors={subtypeColors} />
-        </div>
+        {/* Note: Subtype Distribution moved below Cophenetic Plot */}
 
         {/* UMAP Cluster - Full Width */}
         <div ref={clusterScatterRef}>
@@ -260,12 +257,17 @@ const Index = () => {
           />
         </div>
 
-        {/* Cophenetic Plot - Full Width */}
+        {/* Cophenetic Plot (NMF Rank Selection) - Full Width */}
         <div ref={copheneticRef}>
           <CopheneticPlot 
             rankMetrics={data.rankMetrics} 
             optimalRank={data.summary.optimal_rank} 
           />
+        </div>
+
+        {/* Subtype Distribution - Full Width */}
+        <div ref={subtypeDistRef}>
+          <SubtypeDistribution subtypeCounts={data.summary.subtype_counts} subtypeColors={subtypeColors} />
         </div>
 
         {/* Clustering Metrics - Full Width */}

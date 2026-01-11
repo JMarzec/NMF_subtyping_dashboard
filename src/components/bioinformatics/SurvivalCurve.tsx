@@ -16,13 +16,15 @@ import { useMemo, useRef, useState } from "react";
 import { Download, FileSpreadsheet, Database, Calculator } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { logRankTest, formatPValue } from "@/lib/logRankTest";
-import { estimateCoxPH, formatHR, CoxPHResult, stratifiedCoxPH, StratifiedCoxPHResult } from "@/lib/coxphAnalysis";
+import { estimateCoxPH, formatHR, CoxPHResult, stratifiedCoxPH, StratifiedCoxPHResult, multivariateCoxPH, MultivariateCoxPHResult } from "@/lib/coxphAnalysis";
 import { CoxPHResultFromJSON } from "@/components/bioinformatics/JsonUploader";
 import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AnnotationData } from "@/components/bioinformatics/AnnotationUploader";
 import { ForestPlot } from "@/components/bioinformatics/ForestPlot";
 import { StratumResultsTable } from "@/components/bioinformatics/StratumResultsTable";
+import { MultivariateResultsTable } from "@/components/bioinformatics/MultivariateResultsTable";
 
 export interface SurvivalTimePoint {
   time: number;
@@ -87,6 +89,7 @@ export const SurvivalCurve = ({
 }: SurvivalCurveProps) => {
   const [groupBy, setGroupBy] = useState<string>("nmf_subtype");
   const [stratifyBy, setStratifyBy] = useState<string>("none");
+  const [selectedCovariates, setSelectedCovariates] = useState<string[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
 
   const handleDownloadPNG = () => {
@@ -260,6 +263,36 @@ export const SurvivalCurve = ({
     // Regular estimation
     return { coxPHResult: estimateCoxPH(effectiveData, effectiveCounts), isStratified: false };
   }, [effectiveData, effectiveCounts, coxPHResults, isAnnotationGrouping, stratifyBy, userAnnotations, sampleSubtypes, data, subtypeCounts, groupBy]);
+
+  // Multivariate Cox PH analysis when covariates are selected
+  const multivariateResult = useMemo((): MultivariateCoxPHResult | null => {
+    if (selectedCovariates.length === 0 || !userAnnotations || !sampleSubtypes) {
+      return null;
+    }
+
+    // Build covariate data structure
+    const covariateData: Record<string, Record<string, string | number>> = {};
+    
+    selectedCovariates.forEach(covariate => {
+      covariateData[covariate] = {};
+      Object.entries(userAnnotations.annotations).forEach(([sampleId, cols]) => {
+        const value = cols[covariate];
+        if (value !== undefined && value !== null && value !== '') {
+          covariateData[covariate][sampleId] = value;
+        }
+      });
+    });
+
+    return multivariateCoxPH(data, covariateData, sampleSubtypes, subtypeCounts);
+  }, [selectedCovariates, userAnnotations, sampleSubtypes, data, subtypeCounts]);
+
+  const toggleCovariate = (covariate: string) => {
+    setSelectedCovariates(prev => 
+      prev.includes(covariate) 
+        ? prev.filter(c => c !== covariate)
+        : [...prev, covariate]
+    );
+  };
 
   // Export survival statistics as CSV/TSV
   const exportSurvivalStats = (format: 'csv' | 'tsv') => {
@@ -633,6 +666,45 @@ export const SurvivalCurve = ({
                   </TooltipProvider>
                 )}
               </div>
+            )}
+
+            {/* Multivariate Covariates Selector */}
+            {annotationColumns.length > 0 && groupBy === "nmf_subtype" && (
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2 px-2 py-1 border rounded-md cursor-help">
+                      <span className="text-xs text-muted-foreground">Covariates:</span>
+                      <div className="flex flex-wrap gap-1 max-w-[200px]">
+                        {annotationColumns.slice(0, 4).map(col => (
+                          <div key={col} className="flex items-center gap-1">
+                            <Checkbox
+                              id={`cov-${col}`}
+                              checked={selectedCovariates.includes(col)}
+                              onCheckedChange={() => toggleCovariate(col)}
+                              className="h-3 w-3"
+                            />
+                            <label htmlFor={`cov-${col}`} className="text-xs cursor-pointer">
+                              {col.length > 8 ? `${col.slice(0, 8)}...` : col}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                      {selectedCovariates.length > 0 && (
+                        <Badge variant="outline" className="text-xs">
+                          {selectedCovariates.length}
+                        </Badge>
+                      )}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Select covariates for multivariate Cox regression</p>
+                    {selectedCovariates.length > 0 && (
+                      <p className="text-xs mt-1">Selected: {selectedCovariates.join(', ')}</p>
+                    )}
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
             )}
             
             {logRankResult && (
@@ -1046,6 +1118,11 @@ export const SurvivalCurve = ({
         subtypeColors={effectiveColors}
         stratifyBy={stratifyBy}
       />
+    )}
+
+    {/* Multivariate Cox Regression Results */}
+    {multivariateResult && (
+      <MultivariateResultsTable result={multivariateResult} />
     )}
   </div>
   );
