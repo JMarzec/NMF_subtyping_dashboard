@@ -269,6 +269,19 @@ if (!is.na(surv_time_col) && !is.na(surv_event_col)) {
   raw_survival <- raw_survival[!is.na(raw_survival$time), ]
   
   # Generate Kaplan–Meier plot
+  
+  cox_label <- paste0(
+    "Cox PH (", 
+    cox_results$groups[[1]]$subtype, " vs ", 
+    cox_results$referenceGroup, ")\n",
+    "HR = ", sprintf("%.2f", cox_results$groups[[1]]$hazardRatio),
+    " (95% CI: ",
+    sprintf("%.2f", cox_results$groups[[1]]$lowerCI), "-",
+    sprintf("%.2f", cox_results$groups[[1]]$upperCI), ")\n",
+    "p = ", format.pval(cox_results$groups[[1]]$pValue, digits = 2, eps = 1e-3)
+  )
+  
+  
   pdf("kaplan–meier_plot.pdf", width = 14, height = 8)
   plot(
     fit,
@@ -287,11 +300,20 @@ if (!is.na(surv_time_col) && !is.na(surv_event_col)) {
     bty = "n"
   )
   
-  # Add p-value
+  # Log-rank p-value
   text(
-    x = max(surv_time) * 0.6,
-    y = 0.2,
-    labels = paste0("Log-rank p = ", signif(pvalue, 3))
+    x = max(surv_time) * 0.5,
+    y = 0.25,
+    labels = paste0("Log-rank p = ", signif(pvalue, 3)),
+    adj = 0   # left-aligned text
+  )
+  
+  # Cox PH annotation
+  text(
+    x = max(surv_time) * 0.5,
+    y = 0.15,
+    labels = cox_label,
+    adj = 0   # left-aligned text
   )
   dev.off()
   
