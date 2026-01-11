@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileJson, Check, AlertCircle, Download } from "lucide-react";
+import { Upload, FileJson, Check, AlertCircle, Download, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { NmfSummary, SampleResult, MarkerGene, RankMetric, SurvivalDataPoint } from "@/data/mockNmfData";
 
 export interface NmfData {
@@ -142,6 +143,23 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
           <CardTitle className="text-lg flex items-center gap-2">
             <FileJson className="h-5 w-5 text-primary" />
             Import NMF Results
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <p className="font-medium mb-1">Expected JSON format:</p>
+                  <ul className="text-xs space-y-1">
+                    <li><code>summary</code>: n_samples, n_subtypes, subtype_counts, optimal_rank</li>
+                    <li><code>sampleResults</code>: sample_id, subtype, score_subtype_*</li>
+                    <li><code>markerGenes</code>: gene, subtype, score, pValue</li>
+                    <li><code>rankMetrics</code> (optional): rank, cophenetic, silhouette</li>
+                    <li><code>survivalData</code> (optional): subtype, timePoints</li>
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </CardTitle>
           <Button
             variant="outline"
@@ -149,7 +167,7 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
             className="h-7 text-xs gap-1"
             asChild
           >
-            <a href="/examples/example-nmf-results.json" download>
+            <a href="/examples/example-GSE62254-nmf-results.json" download>
               <Download className="h-3 w-3" />
               Example
             </a>

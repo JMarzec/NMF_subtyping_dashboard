@@ -24,6 +24,7 @@ import {
 } from "@/data/mockNmfData";
 import { Dna, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const Index = () => {
   const [data, setData] = useState<NmfData>({
@@ -106,6 +107,7 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <ThemeToggle />
               <ExportAllButton getChartRefs={getChartRefs} />
               <Button variant="outline" size="sm" onClick={handleGlobalResetFilters}>
                 <RotateCcw className="h-4 w-4 mr-1" />

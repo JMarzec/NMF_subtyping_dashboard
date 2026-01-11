@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileText, Check, AlertCircle, X, Download } from "lucide-react";
+import { Upload, FileText, Check, AlertCircle, X, Download, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface AnnotationData {
   sampleColumn: string;
@@ -121,6 +122,21 @@ export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds }: Annotation
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary" />
             Sample Annotations
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <p className="font-medium mb-1">Expected format:</p>
+                  <ul className="text-xs space-y-1">
+                    <li>TSV or CSV file with headers</li>
+                    <li>First column (or auto-detected): sample IDs</li>
+                    <li>Additional columns: metadata (e.g., Stage, Age, Gender)</li>
+                  </ul>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </CardTitle>
           <Button
             variant="outline"
@@ -128,7 +144,7 @@ export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds }: Annotation
             className="h-6 text-[10px] gap-1 px-2"
             asChild
           >
-            <a href="/examples/example-annotations.tsv" download>
+            <a href="/examples/example-GSE62254-annotations.tsv" download>
               <Download className="h-3 w-3" />
               Example
             </a>
