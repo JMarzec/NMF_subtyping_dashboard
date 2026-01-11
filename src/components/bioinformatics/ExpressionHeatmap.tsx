@@ -545,30 +545,37 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
           });
 
           // Fix sample labels - render vertically like in SVG export
-          clonedElement.querySelectorAll('[data-heatmap-sample-label="true"]').forEach((el) => {
+          clonedElement.querySelectorAll('[data-heatmap-sample-label="true"]').forEach((el, index) => {
             if (!(el instanceof HTMLElement)) return;
             const span = el.querySelector('span');
             
-            // Use CSS transforms to rotate text vertically (like SVG)
+            // Create a container with enough height for rotated text
             el.style.position = 'relative';
-            el.style.height = '65px'; // Increased height for better visibility
+            el.style.height = '90px'; // Increased height for full sample names
             el.style.width = `${cellWidth}px`;
             el.style.overflow = 'visible';
-            el.style.marginTop = '4px'; // Small gap from annotation bar
+            el.style.marginTop = '6px';
+            el.style.display = 'flex';
+            el.style.alignItems = 'flex-start';
+            el.style.justifyContent = 'center';
             
             if (span) {
+              // Get sample name for this position
+              const sampleName = span.textContent || '';
+              
               span.style.position = 'absolute';
+              span.style.left = `${cellWidth / 2 + 2}px`;
+              span.style.top = '0';
               span.style.transformOrigin = 'left top';
-              span.style.transform = 'rotate(-90deg) translateX(-100%)';
+              span.style.transform = 'rotate(90deg)';
               span.style.whiteSpace = 'nowrap';
-              span.style.fontSize = '7px'; // Slightly larger for readability
+              span.style.fontSize = '6px';
               span.style.fontFamily = 'Arial, sans-serif';
               span.style.overflow = 'visible';
               span.style.textOverflow = 'clip';
-              span.style.left = '50%';
-              span.style.top = '0';
-              span.style.marginLeft = '0';
-              span.style.marginTop = '0';
+              span.style.color = '#4b5563';
+              span.style.lineHeight = '1';
+              span.textContent = sampleName;
             }
           });
         },

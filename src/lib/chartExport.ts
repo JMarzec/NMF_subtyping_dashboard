@@ -118,53 +118,98 @@ export const downloadSVGAsFile = (
 };
 
 // Apply computed styles inline to SVG elements for proper export
-const applyComputedStylesToSVG = (svgElement: SVGElement): void => {
+const applyComputedStylesToSVG = (svgElement: SVGElement, originalSvg: SVGElement): void => {
   const elements = svgElement.querySelectorAll('*');
+  const originalElements = originalSvg.querySelectorAll('*');
   
-  elements.forEach((el) => {
+  // Create a map of original elements to get their computed styles
+  const originalMap = new Map<string, Element>();
+  originalElements.forEach((el, idx) => {
+    originalMap.set(`${el.tagName}-${idx}`, el);
+  });
+  
+  elements.forEach((el, idx) => {
     if (el instanceof SVGElement) {
-      const computedStyle = window.getComputedStyle(el);
+      const originalEl = originalMap.get(`${el.tagName}-${idx}`);
+      const computedStyle = originalEl ? window.getComputedStyle(originalEl) : window.getComputedStyle(el);
       
-      // Apply stroke properties
-      if (el.tagName === 'line' || el.tagName === 'path' || el.tagName === 'polyline' || el.tagName === 'polygon' || el.tagName === 'circle' || el.tagName === 'rect') {
+      const tagName = el.tagName.toLowerCase();
+      
+      // Apply stroke properties for shape elements
+      if (['line', 'path', 'polyline', 'polygon', 'circle', 'rect', 'ellipse'].includes(tagName)) {
         const stroke = computedStyle.stroke;
         const strokeWidth = computedStyle.strokeWidth;
         const strokeOpacity = computedStyle.strokeOpacity;
         const strokeDasharray = computedStyle.strokeDasharray;
         
-        if (stroke && stroke !== 'none') {
+        // For Recharts axis lines that might have class-based styling
+        const hasAxisClass = el.classList.contains('recharts-cartesian-axis-line') ||
+                            el.classList.contains('recharts-cartesian-axis-tick-line') ||
+                            el.closest('.recharts-xAxis') ||
+                            el.closest('.recharts-yAxis');
+        
+        const hasGridClass = el.classList.contains('recharts-cartesian-grid-horizontal') ||
+                            el.classList.contains('recharts-cartesian-grid-vertical') ||
+                            el.closest('.recharts-cartesian-grid');
+        
+        // Set stroke - use defaults for axis/grid if computed style is empty
+        if (stroke && stroke !== 'none' && stroke !== '') {
           el.setAttribute('stroke', stroke);
+        } else if (hasAxisClass) {
+          el.setAttribute('stroke', '#666666');
+        } else if (hasGridClass) {
+          el.setAttribute('stroke', '#e0e0e0');
         }
-        if (strokeWidth) {
+        
+        // Set stroke width
+        if (strokeWidth && strokeWidth !== '0' && strokeWidth !== '0px') {
           el.setAttribute('stroke-width', strokeWidth);
+        } else if (hasAxisClass || hasGridClass) {
+          el.setAttribute('stroke-width', '1');
         }
+        
         if (strokeOpacity && strokeOpacity !== '1') {
           el.setAttribute('stroke-opacity', strokeOpacity);
         }
         if (strokeDasharray && strokeDasharray !== 'none') {
           el.setAttribute('stroke-dasharray', strokeDasharray);
         }
-      }
-      
-      // Apply fill properties
-      const fill = computedStyle.fill;
-      if (fill && fill !== 'none') {
-        el.setAttribute('fill', fill);
+        
+        // Apply fill
+        const fill = computedStyle.fill;
+        if (fill && fill !== 'none' && fill !== '') {
+          el.setAttribute('fill', fill);
+        }
       }
       
       // Apply text properties
-      if (el.tagName === 'text' || el.tagName === 'tspan') {
+      if (tagName === 'text' || tagName === 'tspan') {
         const fontSize = computedStyle.fontSize;
         const fontFamily = computedStyle.fontFamily;
         const fontWeight = computedStyle.fontWeight;
         const textAnchor = computedStyle.textAnchor;
+        const fill = computedStyle.fill;
+        const color = computedStyle.color;
         
         if (fontSize) el.setAttribute('font-size', fontSize);
-        if (fontFamily) el.setAttribute('font-family', fontFamily);
+        if (fontFamily) {
+          el.setAttribute('font-family', fontFamily);
+        } else {
+          el.setAttribute('font-family', 'Arial, sans-serif');
+        }
         if (fontWeight && fontWeight !== 'normal' && fontWeight !== '400') {
           el.setAttribute('font-weight', fontWeight);
         }
         if (textAnchor) el.setAttribute('text-anchor', textAnchor);
+        
+        // Ensure text has fill color
+        if (fill && fill !== 'none' && fill !== '') {
+          el.setAttribute('fill', fill);
+        } else if (color && color !== '') {
+          el.setAttribute('fill', color);
+        } else {
+          el.setAttribute('fill', '#666666');
+        }
       }
     }
   });
@@ -222,8 +267,8 @@ export const getSVGAsString = (
   clonedSvg.setAttribute('height', String(rect.height));
   clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   
-  // Apply computed styles to ensure all lines, text, etc. are visible
-  applyComputedStylesToSVG(clonedSvg);
+  // Apply computed styles from original SVG to cloned SVG
+  applyComputedStylesToSVG(clonedSvg, chartSvg);
   
   // Add white background
   const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -256,8 +301,8 @@ export const downloadRechartsAsSVG = (
   clonedSvg.setAttribute('height', String(rect.height));
   clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   
-  // Apply computed styles
-  applyComputedStylesToSVG(clonedSvg);
+  // Apply computed styles from original to cloned
+  applyComputedStylesToSVG(clonedSvg, svgElement);
   
   const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
   bgRect.setAttribute('width', '100%');
