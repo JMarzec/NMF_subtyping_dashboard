@@ -100,14 +100,6 @@ seed <- opt$seed
 surv_time_col_opt <- opt$surv_time_col
 surv_event_col_opt <- opt$surv_event_col
 
-cat("\n========================================\n")
-cat("UTILITY FUNCTIONS\n")
-cat("========================================\n")
-
-log_message <- function(msg, level = "INFO") {
-  timestamp <- format(Sys.time(), "%Y-%m-%d %H:%M:%S")
-  cat(sprintf("[%s] %s: %s\n", timestamp, level, msg))
-}
 
 cat("\n========================================\n")
 cat("NMF Subtyping Analysis\n")
@@ -192,10 +184,10 @@ rownames(samples_annot) <- make.names(rownames(samples_annot))
 # Find common samples
 sample_ids <- colnames(expr_data)
 common_samples <- intersect(sample_ids, rownames(samples_annot))
-log_message(sprintf("Found %d common samples between expression matrix and annotation", length(common_samples)))
+cat(sprintf("Found %d common samples between expression matrix and annotation.\n", length(common_samples)))
 
 if (length(common_samples) == 0) {
-  stop("No common samples found. Ensure column names in expression matrix match sample IDs in annotation.")
+  stop("No common samples found. Ensure column names in expression matrix match sample IDs in annotation.\n")
 }
 
 # Filter and align data
