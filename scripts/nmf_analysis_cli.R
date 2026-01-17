@@ -199,6 +199,10 @@ samples_annot <- samples_annot[ colnames(expr_data), ]
 
 cat("Data loaded successfully.\n\n")
 
+annot_file <- file.path(output_dir, "samples_annotation.tsv")
+write.table(samples_annot, file = annot_file, sep = "\t", quote = FALSE, row.names = FALSE)
+cat(sprintf("Saved sample annotations to: %s\n\n", annot_file))
+
 # ========== PREPROCESSING ==========
 cat("Preprocessing data...\n")
 
