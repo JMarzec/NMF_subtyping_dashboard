@@ -21,11 +21,12 @@ import {
   defaultRankMetrics,
   defaultSurvivalData,
 } from "@/data/mockNmfData";
-import { Dna, RotateCcw, RefreshCw, Minus, Plus } from "lucide-react";
+import { RotateCcw, RefreshCw, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import AccelBioLogo from "@/assets/AccelBio_logo.png";
 
 const Index = () => {
   const [data, setData] = useState<NmfData>({
@@ -129,9 +130,7 @@ const Index = () => {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600">
-                <Dna className="h-6 w-6 text-white" />
-              </div>
+              <img src={AccelBioLogo} alt="Co-Lab AccelBio" className="h-12 w-auto" />
               <div>
                 <h1 className="text-xl font-bold">NMF Subtyping Dashboard</h1>
                 <p className="text-sm text-muted-foreground">Molecular Subtypes Analysis</p>
@@ -223,6 +222,9 @@ const Index = () => {
           />
         </div>
 
+        {/* Clustering Metrics - Below NMF Overview */}
+        <ClusteringMetrics samples={data.samples} />
+
         {/* UMAP Cluster - Full Width */}
         <div ref={clusterScatterRef}>
           <ClusterScatter 
@@ -269,8 +271,6 @@ const Index = () => {
           genesPerSubtype={markerGenesPerSubtype}
         />
 
-        {/* Clustering Metrics - Full Width */}
-        <ClusteringMetrics samples={data.samples} />
 
         {/* Survival Curve - Full Width */}
         <div ref={survivalRef}>

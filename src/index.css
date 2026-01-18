@@ -8,90 +8,85 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Light theme - AccelBio inspired */
+    --background: 0 0% 99%;
+    --foreground: 230 45% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 230 45% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 230 45% 15%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 170 55% 40%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 170 25% 94%;
+    --secondary-foreground: 230 45% 15%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 170 15% 94%;
+    --muted-foreground: 230 20% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 75 60% 50%;
+    --accent-foreground: 230 45% 15%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 170 20% 88%;
+    --input: 170 20% 88%;
+    --ring: 170 55% 40%;
 
     --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 98%;
-
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 170 20% 97%;
+    --sidebar-foreground: 230 45% 15%;
+    --sidebar-primary: 170 55% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 170 25% 92%;
+    --sidebar-accent-foreground: 230 45% 15%;
+    --sidebar-border: 170 20% 88%;
+    --sidebar-ring: 170 55% 40%;
   }
 
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
+    /* Dark theme - AccelBio gradient inspired (deep navy/teal) */
+    --background: 230 50% 8%;
+    --foreground: 170 30% 92%;
 
-    --card: 224 71% 6%;
-    --card-foreground: 213 31% 91%;
+    --card: 230 45% 11%;
+    --card-foreground: 170 30% 92%;
 
-    --popover: 224 71% 6%;
-    --popover-foreground: 213 31% 91%;
+    --popover: 230 45% 11%;
+    --popover-foreground: 170 30% 92%;
 
-    --primary: 262 83% 58%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 75 65% 55%;
+    --primary-foreground: 230 50% 10%;
 
-    --secondary: 215 28% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 200 40% 18%;
+    --secondary-foreground: 170 30% 92%;
 
-    --muted: 215 28% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 200 35% 18%;
+    --muted-foreground: 170 20% 60%;
 
-    --accent: 215 28% 17%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 170 50% 35%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 35%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 215 28% 17%;
-    --input: 215 28% 17%;
-    --ring: 262 83% 58%;
+    --border: 200 35% 20%;
+    --input: 200 35% 20%;
+    --ring: 75 65% 55%;
     
-    --sidebar-background: 224 71% 4%;
-    --sidebar-foreground: 213 31% 91%;
-    --sidebar-primary: 262 83% 58%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 28% 17%;
-    --sidebar-accent-foreground: 213 31% 91%;
-    --sidebar-border: 215 28% 17%;
-    --sidebar-ring: 262 83% 58%;
+    --sidebar-background: 230 50% 8%;
+    --sidebar-foreground: 170 30% 92%;
+    --sidebar-primary: 75 65% 55%;
+    --sidebar-primary-foreground: 230 50% 10%;
+    --sidebar-accent: 200 40% 18%;
+    --sidebar-accent-foreground: 170 30% 92%;
+    --sidebar-border: 200 35% 20%;
+    --sidebar-ring: 75 65% 55%;
   }
 }
 
