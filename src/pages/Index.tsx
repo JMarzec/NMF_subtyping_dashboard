@@ -126,6 +126,15 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>NMF Molecular Subtyping Dashboard — AccelBio</title>
+        <meta name="description" content="Explore NMF clustering, UMAP/PCA, expression heatmaps, marker genes, and multivariate Cox survival analysis." />
+        <link rel="canonical" href="https://accelbio-nmf-subtyping.lovable.app/" />
+        <meta property="og:title" content="NMF Molecular Subtyping Dashboard — AccelBio" />
+        <meta property="og:description" content="Explore NMF clustering, UMAP/PCA, expression heatmaps, marker genes, and multivariate Cox survival analysis." />
+        <meta property="og:url" content="https://accelbio-nmf-subtyping.lovable.app/" />
+        <meta property="og:type" content="website" />
+      </Helmet>
       {/* Header */}
       <header className="border-b border-border/50 bg-card/30 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
