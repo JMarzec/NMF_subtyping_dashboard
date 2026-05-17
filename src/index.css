@@ -67,10 +67,10 @@ All colors MUST be HSL.
     --secondary-foreground: 170 30% 92%;
 
     --muted: 200 35% 18%;
-    --muted-foreground: 170 20% 60%;
+    --muted-foreground: 170 25% 78%;
 
-    --accent: 170 50% 35%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 170 55% 45%;
+    --accent-foreground: 230 50% 8%;
 
     --destructive: 0 62.8% 35%;
     --destructive-foreground: 0 0% 100%;
