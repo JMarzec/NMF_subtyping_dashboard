@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import AccelBioLogo from "@/assets/AccelBio_logo.png";
+import { Helmet } from "react-helmet-async";
 
 const Index = () => {
   const [data, setData] = useState<NmfData>({
