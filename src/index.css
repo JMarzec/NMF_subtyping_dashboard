@@ -18,17 +18,17 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 230 45% 15%;
 
-    --primary: 170 55% 40%;
+    --primary: 170 65% 28%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 170 25% 94%;
     --secondary-foreground: 230 45% 15%;
 
     --muted: 170 15% 94%;
-    --muted-foreground: 230 20% 45%;
+    --muted-foreground: 230 25% 35%;
 
-    --accent: 75 60% 50%;
-    --accent-foreground: 230 45% 15%;
+    --accent: 75 70% 40%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
