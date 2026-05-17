@@ -1,0 +1,9 @@
+# NMF Molecular Subtyping
+
+> Interactive visualisation tool for exploring Non-negative Matrix Factorization (NMF) clustering results, molecular subtypes, marker genes, and survival analysis.
+
+The NMF Molecular Subtyping dashboard, built by Co-Lab AccelBio, lets researchers upload NMF outputs and explore clustering quality, UMAP/PCA projections, expression heatmaps, marker genes, and multivariate Cox regression with forward/backward/stepwise selection and cross-validated concordance.
+
+## Pages
+
+- [Dashboard](/): Main analysis dashboard with NMF overview, clustering metrics, UMAP, PCA, heatmap, marker genes, and survival analysis.

@@ -1,5 +1,6 @@
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import { Helmet } from "react-helmet-async";
 
 const NotFound = () => {
   const location = useLocation();
@@ -9,6 +10,16 @@ const NotFound = () => {
   }, [location.pathname]);
 
   return (
+    <>
+      <Helmet>
+        <title>Page Not Found — NMF Molecular Subtyping</title>
+        <meta name="description" content="The page you are looking for does not exist." />
+        <meta name="robots" content="noindex" />
+        <meta property="og:title" content="Page Not Found — NMF Molecular Subtyping" />
+        <meta property="og:description" content="The page you are looking for does not exist." />
+        <meta property="og:url" content="https://accelbio-nmf-subtyping.lovable.app/404" />
+        <link rel="canonical" href="https://accelbio-nmf-subtyping.lovable.app/404" />
+      </Helmet>
     <div className="flex min-h-screen items-center justify-center bg-muted">
       <div className="text-center">
         <h1 className="mb-4 text-4xl font-bold">404</h1>
@@ -18,6 +29,7 @@ const NotFound = () => {
         </a>
       </div>
     </div>
+    </>
   );
 };
 
