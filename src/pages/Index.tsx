@@ -11,6 +11,8 @@ import { JsonUploader, NmfData } from "@/components/bioinformatics/JsonUploader"
 import { AnnotationUploader, AnnotationData } from "@/components/bioinformatics/AnnotationUploader";
 import { SurvivalCurve } from "@/components/bioinformatics/SurvivalCurve";
 import { ExportAllButton } from "@/components/bioinformatics/ExportAllButton";
+import { AnalysisManager } from "@/components/bioinformatics/AnalysisManager";
+import { AuthButton } from "@/components/AuthButton";
 import { ChartRef } from "@/lib/chartExport";
 import { 
   nmfSummary as defaultSummary, 
@@ -197,6 +199,7 @@ const Index = () => {
                 <RefreshCw className="h-4 w-4 mr-1" />
                 Reset All
               </Button>
+              <AuthButton />
             </div>
           </div>
         </div>
@@ -212,6 +215,9 @@ const Index = () => {
             sampleIds={sampleIds}
           />
         </div>
+
+        {/* Saved analyses */}
+        <AnalysisManager data={data} onLoad={setData} />
 
         {/* Summary Cards - Full Width */}
         <div ref={summaryRef}>
