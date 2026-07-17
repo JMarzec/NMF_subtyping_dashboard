@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "sdk_version": "0.23.0",
+  "path": "/functions/v1/mcp",
+  "auth": {
+    "type": "oauth",
+    "issuer": "https://zvxbojnduszonnmlvojf.supabase.co/auth/v1",
+    "accepted_audiences": [
+      "authenticated"
+    ]
+  },
+  "mcp": {
+    "server": {
+      "name": "nmf-subtyping-mcp",
+      "version": "0.1.0",
+      "title": "NMF Molecular Subtyping"
+    },
+    "tools": [
+      {
+        "name": "whoami",
+        "title": "Who am I",
+        "description": "Return the signed-in user's id and email.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_analyses",
+        "title": "List NMF analyses",
+        "description": "List the signed-in user's saved NMF analyses (id, name, creation date, and summary size).",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {}
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_analysis_summary",
+        "title": "Get analysis summary",
+        "description": "Fetch the summary (optimal rank, subtype counts, n_samples) for one saved NMF analysis.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "analysisId": {
+              "type": "string",
+              "description": "Analysis id from list_analyses."
+            }
+          },
+          "required": [
+            "analysisId"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_marker_genes",
+        "title": "Get marker genes",
+        "description": "Return top marker genes per subtype for one saved analysis. topN defaults to 25 per subtype.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "analysisId": {
+              "type": "string"
+            },
+            "topN": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Genes per subtype (default 25)."
+            },
+            "subtype": {
+              "type": "string",
+              "description": "Filter to a single subtype."
+            }
+          },
+          "required": [
+            "analysisId"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_survival_stats",
+        "title": "Get survival statistics",
+        "description": "Return log-rank p-value and Cox PH hazard ratios / CIs for one saved analysis.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "analysisId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "analysisId"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
