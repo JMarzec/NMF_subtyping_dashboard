@@ -18,10 +18,12 @@ export type Database = {
         Row: {
           cox_ph_results: Json | null
           created_at: string
+          heatmap_data: Json | null
           id: string
           name: string
           rank_metrics: Json | null
           summary: Json
+          survival_data: Json | null
           survival_pvalue: number | null
           updated_at: string
           user_id: string
@@ -29,10 +31,12 @@ export type Database = {
         Insert: {
           cox_ph_results?: Json | null
           created_at?: string
+          heatmap_data?: Json | null
           id?: string
           name: string
           rank_metrics?: Json | null
           summary: Json
+          survival_data?: Json | null
           survival_pvalue?: number | null
           updated_at?: string
           user_id: string
@@ -40,10 +44,12 @@ export type Database = {
         Update: {
           cox_ph_results?: Json | null
           created_at?: string
+          heatmap_data?: Json | null
           id?: string
           name?: string
           rank_metrics?: Json | null
           summary?: Json
+          survival_data?: Json | null
           survival_pvalue?: number | null
           updated_at?: string
           user_id?: string
@@ -133,7 +139,7 @@ export type Database = {
           id: string
           subtype: string
           survival: number | null
-          time: number
+          time: number | null
         }
         Insert: {
           analysis_id: string
@@ -144,7 +150,7 @@ export type Database = {
           id?: string
           subtype: string
           survival?: number | null
-          time: number
+          time?: number | null
         }
         Update: {
           analysis_id?: string
@@ -155,7 +161,7 @@ export type Database = {
           id?: string
           subtype?: string
           survival?: number | null
-          time?: number
+          time?: number | null
         }
         Relationships: [
           {
