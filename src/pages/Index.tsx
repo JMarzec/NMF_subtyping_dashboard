@@ -216,6 +216,9 @@ const Index = () => {
           />
         </div>
 
+        {/* Saved analyses */}
+        <AnalysisManager data={data} onLoad={setData} />
+
         {/* Summary Cards - Full Width */}
         <div ref={summaryRef}>
           <SummaryCards 
