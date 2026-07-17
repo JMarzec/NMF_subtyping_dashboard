@@ -14,7 +14,183 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      analyses: {
+        Row: {
+          cox_ph_results: Json | null
+          created_at: string
+          id: string
+          name: string
+          rank_metrics: Json | null
+          summary: Json
+          survival_pvalue: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cox_ph_results?: Json | null
+          created_at?: string
+          id?: string
+          name: string
+          rank_metrics?: Json | null
+          summary: Json
+          survival_pvalue?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cox_ph_results?: Json | null
+          created_at?: string
+          id?: string
+          name?: string
+          rank_metrics?: Json | null
+          summary?: Json
+          survival_pvalue?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      analysis_marker_genes: {
+        Row: {
+          analysis_id: string
+          data: Json | null
+          gene: string
+          id: string
+          log_fold_change: number | null
+          p_value: number | null
+          rank: number | null
+          subtype: string
+        }
+        Insert: {
+          analysis_id: string
+          data?: Json | null
+          gene: string
+          id?: string
+          log_fold_change?: number | null
+          p_value?: number | null
+          rank?: number | null
+          subtype: string
+        }
+        Update: {
+          analysis_id?: string
+          data?: Json | null
+          gene?: string
+          id?: string
+          log_fold_change?: number | null
+          p_value?: number | null
+          rank?: number | null
+          subtype?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analysis_marker_genes_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analysis_samples: {
+        Row: {
+          analysis_id: string
+          data: Json
+          id: string
+          sample_id: string
+          subtype: string
+        }
+        Insert: {
+          analysis_id: string
+          data: Json
+          id?: string
+          sample_id: string
+          subtype: string
+        }
+        Update: {
+          analysis_id?: string
+          data?: Json
+          id?: string
+          sample_id?: string
+          subtype?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analysis_samples_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analysis_survival_curves: {
+        Row: {
+          analysis_id: string
+          at_risk: number | null
+          censored: number | null
+          data: Json | null
+          events: number | null
+          id: string
+          subtype: string
+          survival: number | null
+          time: number
+        }
+        Insert: {
+          analysis_id: string
+          at_risk?: number | null
+          censored?: number | null
+          data?: Json | null
+          events?: number | null
+          id?: string
+          subtype: string
+          survival?: number | null
+          time: number
+        }
+        Update: {
+          analysis_id?: string
+          at_risk?: number | null
+          censored?: number | null
+          data?: Json | null
+          events?: number | null
+          id?: string
+          subtype?: string
+          survival?: number | null
+          time?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analysis_survival_curves_analysis_id_fkey"
+            columns: ["analysis_id"]
+            isOneToOne: false
+            referencedRelation: "analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          email: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          email?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
