@@ -11,6 +11,8 @@ import { JsonUploader, NmfData } from "@/components/bioinformatics/JsonUploader"
 import { AnnotationUploader, AnnotationData } from "@/components/bioinformatics/AnnotationUploader";
 import { SurvivalCurve } from "@/components/bioinformatics/SurvivalCurve";
 import { ExportAllButton } from "@/components/bioinformatics/ExportAllButton";
+import { AnalysisManager } from "@/components/bioinformatics/AnalysisManager";
+import { AuthButton } from "@/components/AuthButton";
 import { ChartRef } from "@/lib/chartExport";
 import { 
   nmfSummary as defaultSummary, 
