@@ -199,6 +199,7 @@ const Index = () => {
                 <RefreshCw className="h-4 w-4 mr-1" />
                 Reset All
               </Button>
+              <AuthButton />
             </div>
           </div>
         </div>
