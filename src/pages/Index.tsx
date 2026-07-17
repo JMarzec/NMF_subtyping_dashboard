@@ -304,8 +304,11 @@ const Index = () => {
 
       {/* Footer */}
       <footer className="border-t border-border/50 py-4 mt-8">
-        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          Analysis pipeline: GEOquery → limma → NMF (Brunet algorithm)
+        <div className="container mx-auto px-4 text-center text-sm text-muted-foreground space-y-1">
+          <div>Analysis pipeline: GEOquery → limma → NMF (Brunet algorithm)</div>
+          <div>
+            <a href="/connect" className="text-primary hover:underline">Connect an AI assistant (MCP)</a>
+          </div>
         </div>
       </footer>
     </div>
