@@ -165,7 +165,7 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filter
     setExcludedAnnotationValues(new Set());
   };
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{payload:typeof scatterData[number]}> }) => {
     if (active && payload && payload.length > 0) {
       const data = payload[0].payload;
       return (
