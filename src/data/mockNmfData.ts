@@ -2,10 +2,7 @@
 export interface SampleResult {
   sample_id: string;
   subtype: string;
-  score_subtype_1: number;
-  score_subtype_2: number;
-  score_subtype_3: number;
-  score_subtype_4: number;
+  [column: string]: string | number | boolean | null;
 }
 
 export interface MarkerGene {
