@@ -9,6 +9,7 @@ import {
 import { Download, Loader2 } from "lucide-react";
 import { exportAllAsZip, ChartRef, ExportProgress } from "@/lib/chartExport";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
 
 interface ExportAllButtonProps {
   getChartRefs: () => ChartRef[];
@@ -28,6 +29,7 @@ export const ExportAllButton = ({ getChartRefs }: ExportAllButtonProps) => {
     try {
       const charts = getChartRefs();
       await exportAllAsZip(charts, 'png', 'nmf-visualizations', handleProgress);
+    } catch(e:unknown) { toast.error(e instanceof Error?e.message:"Export failed");
     } finally {
       setIsExporting(false);
       setProgress(null);
@@ -40,6 +42,7 @@ export const ExportAllButton = ({ getChartRefs }: ExportAllButtonProps) => {
     try {
       const charts = getChartRefs();
       await exportAllAsZip(charts, 'svg', 'nmf-visualizations', handleProgress);
+    } catch(e:unknown) { toast.error(e instanceof Error?e.message:"Export failed");
     } finally {
       setIsExporting(false);
       setProgress(null);

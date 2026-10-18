@@ -96,7 +96,7 @@ export const BackwardEliminationPanel = ({ result, onApplyFinal }: BackwardElimi
           )}
         </div>
         <div className="flex gap-2">
-          {onApplyFinal && result.finalCovariates.length > 0 && (
+          {onApplyFinal && (
             <Button 
               variant="default" 
               size="sm" 
