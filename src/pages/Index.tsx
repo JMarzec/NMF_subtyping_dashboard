@@ -14,15 +14,9 @@ import { ExportAllButton } from "@/components/bioinformatics/ExportAllButton";
 import { AnalysisManager } from "@/components/bioinformatics/AnalysisManager";
 import { AuthButton } from "@/components/AuthButton";
 import { ChartRef } from "@/lib/chartExport";
-import { 
-  nmfSummary as defaultSummary, 
-  sampleResults as defaultSamples, 
-  markerGenes as defaultMarkerGenes, 
-  generateHeatmapData,
-  generateSubtypeColors,
-  defaultRankMetrics,
-  defaultSurvivalData,
-} from "@/data/mockNmfData";
+import {generateSubtypeColors} from "@/data/mockNmfData";
+import example from "../../public/examples/example-GSE62254-nmf-results.json";
+import {normalizeAnalysis} from "@/lib/analysisData";
 import { RotateCcw, RefreshCw, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,15 +27,8 @@ import { Helmet } from "react-helmet-async";
 import { PlotFiltersProvider } from "@/components/bioinformatics/PlotFilters";
 
 const Index = () => {
-  const [data, setData] = useState<NmfData>({
-    summary: defaultSummary,
-    samples: defaultSamples,
-    markerGenes: defaultMarkerGenes,
-    rankMetrics: defaultRankMetrics,
-    survivalData: defaultSurvivalData,
-    heatmapData: generateHeatmapData(),
-  });
-
+  const [data,setData]=useState<NmfData>(()=>normalizeAnalysis(example));
+  const [isExample,setIsExample]=useState(true);
   // User-provided annotation data
   const [userAnnotations, setUserAnnotations] = useState<AnnotationData | undefined>(undefined);
 
@@ -66,15 +53,8 @@ const Index = () => {
   }, []);
 
   const handleResetAll = useCallback(() => {
-    // Reset to default data
-    setData({
-      summary: defaultSummary,
-      samples: defaultSamples,
-      markerGenes: defaultMarkerGenes,
-      rankMetrics: defaultRankMetrics,
-      survivalData: defaultSurvivalData,
-      heatmapData: generateHeatmapData(),
-    });
+    setData(normalizeAnalysis(example));
+    setIsExample(true);
     // Clear annotations
     setUserAnnotations(undefined);
     // Reset filters
@@ -115,6 +95,7 @@ const Index = () => {
 
   const handleDataLoaded = useCallback((next: NmfData) => {
     setData(next);
+    setIsExample(false);
     setUserAnnotations(next.annotations);
     setFilterResetKey(prev=>prev+1);
   }, []);
@@ -125,8 +106,8 @@ const Index = () => {
 
   // Calculate total marker genes
   const totalMarkerGenes = useMemo(() => {
-    return markerGenesPerSubtype * data.summary.n_subtypes;
-  }, [markerGenesPerSubtype, data.summary.n_subtypes]);
+    return Object.keys(data.summary.subtype_counts).reduce((sum,st)=>sum+Math.min(markerGenesPerSubtype,data.markerGenes.filter(g=>g.subtype===st).length),0);
+  }, [markerGenesPerSubtype, data.summary.subtype_counts, data.markerGenes]);
 
   // Create sample to subtype mapping for survival analysis
   const sampleSubtypes = useMemo(() => {
@@ -226,6 +207,7 @@ const Index = () => {
           />
         </div>
 
+        {isExample && <p className="text-sm text-muted-foreground">Example analysis · GSE62254</p>}
         {/* Saved analyses */}
         <AnalysisManager data={{...data, annotations:userAnnotations}} onLoad={handleDataLoaded} />
 

@@ -25,11 +25,11 @@ export function AnalysisManager({ data, onLoad }: Props) {
   const loadSequence=useRef(0);
   const refreshSequence=useRef(0);
   const rowsCount=useRef(0);
-  rowsCount.current=analyses?.length??0;
   const [hasMore,setHasMore]=useState(false);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [analyses, setAnalyses] = useState<AnalysisRow[]>([]);
+  rowsCount.current=analyses.length;
   const [selected, setSelected] = useState<string>("");
   const [loading, setLoading] = useState(false);
 

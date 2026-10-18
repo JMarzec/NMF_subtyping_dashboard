@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, Line,
   PieChart, Pie, Cell, Legend
 } from "recharts";
-import { RankMetric, defaultRankMetrics } from "@/data/mockNmfData";
+import { RankMetric } from "@/data/mockNmfData";
 import { useRef } from "react";
 import { Download } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
