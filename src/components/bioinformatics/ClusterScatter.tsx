@@ -1,3 +1,4 @@
+import { computeUMAP, nmfVectors } from "@/lib/dimensionality";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
@@ -76,26 +77,24 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filter
     });
   }, [samples, excludedSubtypes, excludedAnnotationValues, selectedAnnotation, userAnnotations]);
 
-  // Simulate UMAP-like coordinates based on subtype scores
+  const embedding = useMemo(() => {
+    const supplied=samples.every(s=>Number.isFinite(Number(s.umap_1)) && Number.isFinite(Number(s.umap_2)) && s.umap_1!==undefined && s.umap_2!==undefined);
+    const rows=supplied?samples.map(s=>[Number(s.umap_1),Number(s.umap_2)]):computeUMAP(nmfVectors(samples));
+    return new Map(samples.flatMap((s,i)=>rows[i]?[[s.sample_id,rows[i]] as const]:[]));
+  },[samples]);
+  // Compute a seeded embedding independently of colors and filters
   const { scatterData, uniqueSubtypes, uniqueAnnotationValues } = useMemo(() => {
     const subtypes = [...new Set(samples.map(s => s.subtype))].sort();
-    const subtypeAngles = new Map<string, number>();
-    subtypes.forEach((subtype, idx) => {
-      subtypeAngles.set(subtype, (idx / subtypes.length) * 2 * Math.PI);
-    });
-
     const data = filteredSamples.map((sample) => {
-      const baseAngle = subtypeAngles.get(sample.subtype) || 0;
-      const angle = baseAngle + (Math.random() - 0.5) * 0.8;
-      const radius = 2 + Math.random() * 1.5;
-      
+      const coordinates = embedding.get(sample.sample_id);
+      if (!coordinates) return null;
       const userAnnotValue = selectedAnnotation && userAnnotations?.annotations[sample.sample_id]
         ? userAnnotations.annotations[sample.sample_id][selectedAnnotation]
         : undefined;
       
       return {
-        x: Math.cos(angle) * radius + (Math.random() - 0.5) * 0.8,
-        y: Math.sin(angle) * radius + (Math.random() - 0.5) * 0.8,
+        x: coordinates[0],
+        y: coordinates[1],
         z: 50,
         subtype: sample.subtype,
         sample_id: sample.sample_id,
@@ -107,8 +106,8 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filter
       ? [...new Set(samples.map(s => userAnnotations?.annotations[s.sample_id]?.[selectedAnnotation]).filter(Boolean))].sort()
       : [];
 
-    return { scatterData: data, uniqueSubtypes: subtypes, uniqueAnnotationValues: annotValues };
-  }, [filteredSamples, samples, selectedAnnotation, userAnnotations]);
+    return { scatterData: data.filter((v): v is NonNullable<typeof v> => v !== null), uniqueSubtypes: subtypes, uniqueAnnotationValues: annotValues };
+  }, [filteredSamples, samples, selectedAnnotation, userAnnotations, embedding]);
 
   const toggleSubtype = (subtype: string) => {
     setExcludedSubtypes(prev => {
@@ -190,7 +189,7 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filter
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
-        <CardTitle className="text-lg">Sample Clustering (UMAP-style)</CardTitle>
+        <CardTitle className="text-lg">Sample Clustering (UMAP)</CardTitle>
         <div className="flex items-center gap-2">
           {userAnnotations && userAnnotations.columns.length > 0 && (
             <AnnotationSelector

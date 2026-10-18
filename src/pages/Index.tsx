@@ -38,6 +38,7 @@ const Index = () => {
     markerGenes: defaultMarkerGenes,
     rankMetrics: defaultRankMetrics,
     survivalData: defaultSurvivalData,
+    heatmapData: generateHeatmapData(),
   });
 
   // User-provided annotation data
@@ -71,6 +72,7 @@ const Index = () => {
       markerGenes: defaultMarkerGenes,
       rankMetrics: defaultRankMetrics,
       survivalData: defaultSurvivalData,
+      heatmapData: generateHeatmapData(),
     });
     // Clear annotations
     setUserAnnotations(undefined);
@@ -101,7 +103,7 @@ const Index = () => {
   const sampleIds = useMemo(() => data.samples.map(s => s.sample_id), [data.samples]);
 
   const heatmapData = useMemo(() => {
-    return data.heatmapData || generateHeatmapData();
+    return data.heatmapData ?? { genes: [], samples: [], sampleSubtypes: [], values: [] };
   }, [data.heatmapData]);
 
   // Generate colors dynamically from subtype names in data
@@ -109,6 +111,12 @@ const Index = () => {
     const subtypes = Object.keys(data.summary.subtype_counts);
     return generateSubtypeColors(subtypes);
   }, [data.summary.subtype_counts]);
+
+  const handleDataLoaded = useCallback((next: NmfData) => {
+    setData(next);
+    setUserAnnotations(next.annotations);
+    setFilterResetKey(prev=>prev+1);
+  }, []);
 
   const handleAnnotationLoaded = useCallback((annotation: AnnotationData) => {
     setUserAnnotations(annotation);
@@ -140,7 +148,7 @@ const Index = () => {
       {/* Header */}
       <header className="border-b border-border/50 bg-card/30 backdrop-blur-md sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <img src={AccelBioLogo} alt="Co-Lab AccelBio" className="h-12 w-auto" />
               <div>
@@ -148,7 +156,7 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Molecular Subtypes Analysis</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               {/* Marker genes per subtype selector */}
               <div className="flex items-center gap-2 border-r border-border pr-3">
                 <Label htmlFor="header-genes-per-subtype" className="text-xs text-muted-foreground whitespace-nowrap">
@@ -209,15 +217,16 @@ const Index = () => {
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* Upload Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <JsonUploader onDataLoaded={setData} />
-          <AnnotationUploader 
+          <JsonUploader onDataLoaded={handleDataLoaded} />
+          <AnnotationUploader key={filterResetKey}
+            onRemove={() => setUserAnnotations(undefined)}
             onAnnotationLoaded={handleAnnotationLoaded} 
             sampleIds={sampleIds}
           />
         </div>
 
         {/* Saved analyses */}
-        <AnalysisManager data={data} onLoad={setData} />
+        <AnalysisManager data={{...data, annotations:userAnnotations}} onLoad={handleDataLoaded} />
 
         {/* Summary Cards - Full Width */}
         <div ref={summaryRef}>
@@ -269,6 +278,7 @@ const Index = () => {
 
         {/* Expression Heatmap - Full Width */}
         <div ref={heatmapRef}>
+          {heatmapData.genes.length === 0 ? <p className="text-muted-foreground">Expression heatmap unavailable: no expression values supplied.</p> : <>
           <ExpressionHeatmap 
             ref={heatmapComponentRef}
             data={heatmapData} 
@@ -278,6 +288,7 @@ const Index = () => {
             markerGenesPerSubtype={markerGenesPerSubtype}
             markerGenes={data.markerGenes}
           />
+          </>}
         </div>
 
         {/* Marker Genes - Full Width (now below heatmap) */}
@@ -290,7 +301,8 @@ const Index = () => {
 
         {/* Survival Curve - Full Width */}
         <div ref={survivalRef}>
-          <SurvivalCurve 
+          <SurvivalCurve key={filterResetKey}
+            rawSurvivalData={data.rawSurvivalData}
             data={data.survivalData || []} 
             subtypeColors={subtypeColors}
             subtypeCounts={data.summary.subtype_counts}

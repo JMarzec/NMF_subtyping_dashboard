@@ -1,3 +1,4 @@
+import { hierarchicalCluster, matrixExtent, type ClusteringMethod, type DistanceMetric } from "@/lib/clustering";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -32,9 +33,6 @@ interface ExpressionHeatmapProps {
   markerGenes?: MarkerGene[];
 }
 
-type ClusteringMethod = "none" | "average" | "complete" | "single" | "ward";
-type DistanceMetric = "euclidean" | "manhattan" | "correlation";
-
 const CLUSTERING_METHODS: { value: ClusteringMethod; label: string }[] = [
   { value: "none", label: "None" },
   { value: "average", label: "Average" },
@@ -50,7 +48,7 @@ const DISTANCE_METRICS: { value: DistanceMetric; label: string }[] = [
 ];
 
 const getHeatmapColor = (value: number, min: number, max: number) => {
-  const normalized = (value - min) / (max - min);
+  const normalized = max === min ? 0.5 : (value - min) / (max - min);
   if (normalized < 0.5) {
     // Blue to white
     const intensity = normalized * 2;
@@ -69,159 +67,6 @@ const zScoreNormalize = (values: number[][]): number[][] => {
     const std = Math.sqrt(row.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / row.length);
     return std === 0 ? row.map(() => 0) : row.map(v => (v - mean) / std);
   });
-};
-
-// Calculate distance between two vectors based on metric
-const calculateDistance = (a: number[], b: number[], metric: DistanceMetric): number => {
-  switch (metric) {
-    case "euclidean": {
-      let sum = 0;
-      for (let i = 0; i < a.length; i++) {
-        sum += Math.pow(a[i] - b[i], 2);
-      }
-      return Math.sqrt(sum);
-    }
-    case "manhattan": {
-      let sum = 0;
-      for (let i = 0; i < a.length; i++) {
-        sum += Math.abs(a[i] - b[i]);
-      }
-      return sum;
-    }
-    case "correlation": {
-      const meanA = a.reduce((s, v) => s + v, 0) / a.length;
-      const meanB = b.reduce((s, v) => s + v, 0) / b.length;
-      let num = 0, denA = 0, denB = 0;
-      for (let i = 0; i < a.length; i++) {
-        const devA = a[i] - meanA;
-        const devB = b[i] - meanB;
-        num += devA * devB;
-        denA += devA * devA;
-        denB += devB * devB;
-      }
-      const corr = denA > 0 && denB > 0 ? num / Math.sqrt(denA * denB) : 0;
-      return 1 - corr; // Convert correlation to distance
-    }
-    default:
-      return 0;
-  }
-};
-
-// Hierarchical clustering implementation
-interface ClusterNode {
-  indices: number[];
-  left?: ClusterNode;
-  right?: ClusterNode;
-  distance: number;
-}
-
-const calculateDistanceMatrix = (data: number[][], metric: DistanceMetric): number[][] => {
-  const n = data.length;
-  const distMatrix: number[][] = Array(n).fill(null).map(() => Array(n).fill(0));
-  
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      const dist = calculateDistance(data[i], data[j], metric);
-      distMatrix[i][j] = dist;
-      distMatrix[j][i] = dist;
-    }
-  }
-  return distMatrix;
-};
-
-const clusterDistance = (
-  cluster1: ClusterNode,
-  cluster2: ClusterNode,
-  distMatrix: number[][],
-  method: ClusteringMethod
-): number => {
-  const distances: number[] = [];
-  
-  for (const i of cluster1.indices) {
-    for (const j of cluster2.indices) {
-      distances.push(distMatrix[i][j]);
-    }
-  }
-  
-  switch (method) {
-    case "single":
-      return Math.min(...distances);
-    case "complete":
-      return Math.max(...distances);
-    case "average":
-      return distances.reduce((a, b) => a + b, 0) / distances.length;
-    case "ward": {
-      // Simplified Ward's method - uses average distance weighted by cluster sizes
-      const avgDist = distances.reduce((a, b) => a + b, 0) / distances.length;
-      const n1 = cluster1.indices.length;
-      const n2 = cluster2.indices.length;
-      return avgDist * Math.sqrt((2 * n1 * n2) / (n1 + n2));
-    }
-    default:
-      return distances.reduce((a, b) => a + b, 0) / distances.length;
-  }
-};
-
-const hierarchicalCluster = (
-  data: number[][],
-  method: ClusteringMethod,
-  metric: DistanceMetric
-): { order: number[]; tree: DendrogramNode | null } => {
-  if (method === "none" || data.length <= 1) {
-    return { order: data.map((_, i) => i), tree: null };
-  }
-  
-  const distMatrix = calculateDistanceMatrix(data, metric);
-  
-  // Initialize clusters - each item is its own cluster
-  let clusters: ClusterNode[] = data.map((_, i) => ({
-    indices: [i],
-    distance: 0,
-  }));
-  
-  // Agglomerative clustering
-  while (clusters.length > 1) {
-    let minDist = Infinity;
-    let minI = 0;
-    let minJ = 1;
-    
-    // Find closest pair of clusters
-    for (let i = 0; i < clusters.length; i++) {
-      for (let j = i + 1; j < clusters.length; j++) {
-        const dist = clusterDistance(clusters[i], clusters[j], distMatrix, method);
-        if (dist < minDist) {
-          minDist = dist;
-          minI = i;
-          minJ = j;
-        }
-      }
-    }
-    
-    // Merge clusters
-    const newCluster: ClusterNode = {
-      indices: [...clusters[minI].indices, ...clusters[minJ].indices],
-      left: clusters[minI],
-      right: clusters[minJ],
-      distance: minDist,
-    };
-    
-    // Remove merged clusters and add new one
-    clusters = clusters.filter((_, i) => i !== minI && i !== minJ);
-    clusters.push(newCluster);
-  }
-  
-  // Extract leaf order from dendrogram
-  const extractOrder = (node: ClusterNode): number[] => {
-    if (!node.left && !node.right) {
-      return node.indices;
-    }
-    const leftOrder = node.left ? extractOrder(node.left) : [];
-    const rightOrder = node.right ? extractOrder(node.right) : [];
-    return [...leftOrder, ...rightOrder];
-  };
-  
-  const tree = clusters[0] as DendrogramNode;
-  return { order: extractOrder(tree), tree };
 };
 
 // Transpose matrix for column clustering
@@ -393,15 +238,14 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
   const { displayValues, minVal, maxVal, sortedSampleIndices, sortedGeneIndices, uniqueSubtypes, sampleDendrogram, geneDendrogram } = useMemo(() => {
     const normalizedValues = useZScore ? zScoreNormalize(filteredData.values) : filteredData.values;
     const allValues = normalizedValues.flat();
-    const min = allValues.length > 0 ? Math.min(...allValues) : 0;
-    const max = allValues.length > 0 ? Math.max(...allValues) : 1;
+    const { min, max } = matrixExtent(normalizedValues);
 
     // Cluster or sort samples
     let sampleIndices: number[];
     let sampleTree: DendrogramNode | null = null;
     if (sampleClusterMethod !== "none" && filteredData.samples.length > 1) {
       const transposedData = transpose(normalizedValues);
-      const result = hierarchicalCluster(transposedData, sampleClusterMethod, distanceMetric);
+      const result = hierarchicalCluster(transposedData, distanceMetric !== "euclidean" && sampleClusterMethod === "ward" ? "average" : sampleClusterMethod, distanceMetric);
       sampleIndices = result.order;
       sampleTree = result.tree;
     } else {
@@ -416,7 +260,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
     let geneIndices: number[];
     let geneTree: DendrogramNode | null = null;
     if (geneClusterMethod !== "none" && filteredData.genes.length > 1) {
-      const result = hierarchicalCluster(normalizedValues, geneClusterMethod, distanceMetric);
+      const result = hierarchicalCluster(normalizedValues, distanceMetric !== "euclidean" && geneClusterMethod === "ward" ? "average" : geneClusterMethod, distanceMetric);
       geneIndices = result.order;
       geneTree = result.tree;
     } else {
@@ -1048,7 +892,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
           </div>
           <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground whitespace-nowrap">Distance:</Label>
-            <Select value={distanceMetric} onValueChange={(v) => setDistanceMetric(v as DistanceMetric)}>
+            <Select value={distanceMetric} onValueChange={(v) => { setDistanceMetric(v as DistanceMetric); if(v !== "euclidean") { if(sampleClusterMethod === "ward") setSampleClusterMethod("average"); if(geneClusterMethod === "ward") setGeneClusterMethod("average"); } }}>
               <SelectTrigger className="h-7 w-[100px] text-xs">
                 <SelectValue />
               </SelectTrigger>
