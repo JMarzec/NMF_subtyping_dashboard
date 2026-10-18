@@ -42,9 +42,20 @@
           "openWorldHint": false
         },
         "inputSchema": {
-          "$schema": "http://json-schema.org/draft-07/schema#",
           "type": "object",
-          "properties": {}
+          "properties": {
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "pageSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
         },
         "outputSchema": null
       },
@@ -88,9 +99,19 @@
             "analysisId": {
               "type": "string"
             },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "pageSize": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
             "topN": {
               "type": "integer",
-              "exclusiveMinimum": 0,
+              "minimum": 1,
+              "maximum": 100,
               "description": "Genes per subtype (default 25)."
             },
             "subtype": {
