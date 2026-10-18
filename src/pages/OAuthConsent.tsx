@@ -5,18 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Helmet } from "react-helmet-async";
 
-// Beta auth.oauth namespace — typed wrapper.
-type OAuthApi = {
-  getAuthorizationDetails: (id: string) => Promise<{ data: any; error: any }>;
-  approveAuthorization: (id: string) => Promise<{ data: any; error: any }>;
-  denyAuthorization: (id: string) => Promise<{ data: any; error: any }>;
-};
-const oauth = (supabase.auth as unknown as { oauth: OAuthApi }).oauth;
+const oauth = supabase.auth.oauth;
+type Details = { client?: { name?: string; redirect_uri?: string }; scope?: string; redirect_url?: string; redirect_to?: string };
 
 export default function OAuthConsent() {
   const [params] = useSearchParams();
   const authorizationId = params.get("authorization_id") ?? "";
-  const [details, setDetails] = useState<any>(null);
+  const [details, setDetails] = useState<Details | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -37,11 +32,12 @@ export default function OAuthConsent() {
         const { data, error } = await oauth.getAuthorizationDetails(authorizationId);
         if (!active) return;
         if (error) { setError(error.message ?? String(error)); return; }
-        const immediate = data?.redirect_url ?? data?.redirect_to;
-        if (immediate && !data?.client) { window.location.href = immediate; return; }
-        setDetails(data);
-      } catch (e: any) {
-        setError(e?.message ?? "Failed to load authorization request.");
+        const request=data as Details;
+        const immediate = request?.redirect_url ?? request?.redirect_to;
+        if (immediate && !request?.client) { window.location.href = immediate; return; }
+        setDetails(request);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Failed to load authorization request.");
       }
     })();
     return () => { active = false; };
@@ -54,11 +50,11 @@ export default function OAuthConsent() {
         ? await oauth.approveAuthorization(authorizationId)
         : await oauth.denyAuthorization(authorizationId);
       if (res.error) { setError(res.error.message ?? String(res.error)); setBusy(false); return; }
-      const target = res.data?.redirect_url ?? res.data?.redirect_to;
+      const target = res.data?.redirect_url;
       if (!target) { setError("No redirect returned by the authorization server."); setBusy(false); return; }
       window.location.href = target;
-    } catch (e: any) {
-      setError(e?.message ?? "Authorization failed.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Authorization failed.");
       setBusy(false);
     }
   }

@@ -8,33 +8,28 @@ export default defineTool({
   description: "Return top marker genes per subtype for one saved analysis. topN defaults to 25 per subtype.",
   inputSchema: {
     analysisId: z.string(),
-    topN: z.number().int().positive().optional().describe("Genes per subtype (default 25)."),
+    offset:z.number().int().nonnegative().optional(),
+    pageSize:z.number().int().min(1).max(500).optional(),
+    topN: z.number().int().min(1).max(100).optional().describe("Genes per subtype (default 25)."),
     subtype: z.string().optional().describe("Filter to a single subtype."),
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ analysisId, topN, subtype }, ctx) => {
+  handler: async ({ analysisId, topN, subtype, offset=0, pageSize=100 }, ctx) => {
     const err = requireAuth(ctx);
     if (err) return err;
     const sb = supabaseForUser(ctx);
     const limit = topN ?? 25;
-    let q = sb
-      .from("analysis_marker_genes")
-      .select("gene, subtype, log_fold_change, p_value, rank")
-      .eq("analysis_id", analysisId)
-      .order("subtype", { ascending: true })
-      .order("rank", { ascending: true });
-    if (subtype) q = q.eq("subtype", subtype);
-    const { data, error } = await q;
-    if (error) return { content: [{ type: "text", text: error.message }], isError: true };
-    const bySubtype: Record<string, any[]> = {};
-    for (const row of data ?? []) {
-      (bySubtype[row.subtype] ||= []).push(row);
-    }
-    const trimmed: any[] = [];
-    for (const s of Object.keys(bySubtype)) trimmed.push(...bySubtype[s].slice(0, limit));
+    const {data:analysis,error}=await sb.from("analyses").select("document").eq("id",analysisId).maybeSingle();
+    if(error)return {content:[{type:"text",text:error.message}],isError:true};
+    if(!analysis?.document)return {content:[{type:"text",text:"Analysis unavailable; re-import legacy data"}],isError:true};
+    const document=analysis.document as {markerGenes?:Array<{gene:string;subtype:string;weight:number}>};
+    const groups=new Map<string,NonNullable<typeof document.markerGenes>>();
+    for(const marker of document.markerGenes??[]){if(subtype&&marker.subtype!==subtype)continue;const entries=groups.get(marker.subtype)??[];entries.push(marker);groups.set(marker.subtype,entries);}
+    const all=[...groups.keys()].sort().flatMap(s=>(groups.get(s)??[]).sort((a,b)=>b.weight-a.weight).slice(0,limit));
+    const trimmed=all.slice(offset,offset+pageSize);
     return {
       content: [{ type: "text", text: JSON.stringify(trimmed, null, 2) }],
-      structuredContent: { markerGenes: trimmed },
+      structuredContent: { markerGenes: trimmed, nextOffset:offset+pageSize<all.length?offset+pageSize:null },
     };
   },
 });

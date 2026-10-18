@@ -42,10 +42,10 @@ export const NmfOverviewPanel = ({
   };
 
   // Cophenetic data
-  const rankData = rankMetrics && rankMetrics.length > 0 ? rankMetrics : defaultRankMetrics;
+  const rankData = rankMetrics ?? [];
   const optimal = optimalRank ?? rankData.reduce((max, curr) => 
     curr.cophenetic > max.cophenetic ? curr : max, rankData[0]
-  ).rank;
+  )?.rank;
 
   // Distribution data
   const distributionData = Object.entries(subtypeCounts).map(([key, value]) => ({

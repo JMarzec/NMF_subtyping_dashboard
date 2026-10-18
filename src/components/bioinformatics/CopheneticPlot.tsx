@@ -22,10 +22,10 @@ export const CopheneticPlot = ({ rankMetrics, optimalRank }: CopheneticPlotProps
     downloadRechartsAsSVG(chartRef.current, "nmf-rank-selection");
   };
 
-  const data = rankMetrics && rankMetrics.length > 0 ? rankMetrics : defaultRankMetrics;
+  const data = rankMetrics ?? [];
   const optimal = optimalRank ?? data.reduce((max, curr) => 
     curr.cophenetic > max.cophenetic ? curr : max, data[0]
-  ).rank;
+  )?.rank;
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">

@@ -36,6 +36,7 @@ export default function AuthPage() {
 
   async function handleGoogle() {
     setBusy(true);
+    try {
     // Preserve intended destination for after Google returns.
     sessionStorage.setItem("post_auth_redirect", nextPath);
     const redirectUri = `${window.location.origin}/auth/callback`;
@@ -46,8 +47,12 @@ export default function AuthPage() {
       return;
     }
     if (res.redirected) return;
-    // Tokens set — navigate to next.
+    const {data,error}=await supabase.auth.getSession();
+    if(error)throw error;
+    if(!data.session)throw new Error("Google sign-in did not establish a session. Please try again.");
     nav(nextPath, { replace: true });
+    }catch(e:unknown){toast.error(e instanceof Error?e.message:"Google sign-in failed");}
+    finally{setBusy(false);}
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -64,8 +69,8 @@ export default function AuthPage() {
         if (error) throw error;
         toast.success("Check your email to confirm your account.");
       }
-    } catch (err: any) {
-      toast.error(err.message ?? "Authentication failed");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Authentication failed");
     } finally {
       setBusy(false);
     }

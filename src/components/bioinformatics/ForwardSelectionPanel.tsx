@@ -99,7 +99,7 @@ export const ForwardSelectionPanel = ({ result, onApplyFinal }: ForwardSelection
           )}
         </div>
         <div className="flex gap-2">
-          {onApplyFinal && result.finalCovariates.length > 0 && (
+          {onApplyFinal && (
             <Button 
               variant="default" 
               size="sm" 
@@ -176,8 +176,8 @@ export const ForwardSelectionPanel = ({ result, onApplyFinal }: ForwardSelection
                   <TableCell className="text-right">
                     {step.lrtPValue !== undefined ? (
                       <Badge 
-                        variant={step.lrtPValue < 0.05 ? "default" : "secondary"}
-                        className={`text-xs ${step.lrtPValue < 0.05 ? "bg-blue-600 hover:bg-blue-700" : ""}`}
+                        variant={step.lrtPValue < result.threshold ? "default" : "secondary"}
+                        className={`text-xs ${step.lrtPValue < result.threshold ? "bg-primary" : ""}`}
                       >
                         {formatPValue(step.lrtPValue)}
                       </Badge>

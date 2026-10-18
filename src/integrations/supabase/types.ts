@@ -18,10 +18,12 @@ export type Database = {
         Row: {
           cox_ph_results: Json | null
           created_at: string
+          document: Json | null
           heatmap_data: Json | null
           id: string
           name: string
           rank_metrics: Json | null
+          schema_version: number
           summary: Json
           survival_data: Json | null
           survival_pvalue: number | null
@@ -31,10 +33,12 @@ export type Database = {
         Insert: {
           cox_ph_results?: Json | null
           created_at?: string
+          document?: Json | null
           heatmap_data?: Json | null
           id?: string
           name: string
           rank_metrics?: Json | null
+          schema_version?: number
           summary: Json
           survival_data?: Json | null
           survival_pvalue?: number | null
@@ -44,10 +48,12 @@ export type Database = {
         Update: {
           cox_ph_results?: Json | null
           created_at?: string
+          document?: Json | null
           heatmap_data?: Json | null
           id?: string
           name?: string
           rank_metrics?: Json | null
+          schema_version?: number
           summary?: Json
           survival_data?: Json | null
           survival_pvalue?: number | null
@@ -202,7 +208,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      save_analysis: {
+        Args: { p_document: Json; p_id: string; p_name: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

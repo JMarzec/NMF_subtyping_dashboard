@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Upload, FileText, Check, AlertCircle, X, Download, HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { parseDelimitedFile, buildAnnotations } from "@/lib/delimited";
 
 export interface AnnotationData {
   sampleColumn: string;
@@ -12,26 +13,11 @@ export interface AnnotationData {
 
 interface AnnotationUploaderProps {
   onAnnotationLoaded: (annotation: AnnotationData) => void;
+  onRemove?: () => void;
   sampleIds?: string[]; // Optional: sample IDs from NMF data to validate against
 }
 
-const parseDelimitedFile = (text: string): { headers: string[]; rows: string[][] } => {
-  const lines = text.trim().split(/\r?\n/);
-  if (lines.length === 0) return { headers: [], rows: [] };
-  
-  // Detect delimiter (tab vs comma)
-  const firstLine = lines[0];
-  const delimiter = firstLine.includes('\t') ? '\t' : ',';
-  
-  const headers = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
-  const rows = lines.slice(1).map(line => 
-    line.split(delimiter).map(cell => cell.trim().replace(/^["']|["']$/g, ''))
-  );
-  
-  return { headers, rows };
-};
-
-export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds }: AnnotationUploaderProps) => {
+export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds, onRemove }: AnnotationUploaderProps) => {
   const [annotationData, setAnnotationData] = useState<AnnotationData | null>(null);
   const [error, setError] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
@@ -54,47 +40,13 @@ export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds }: Annotation
         return;
       }
 
-      // Find which column matches sample IDs (if provided)
-      let sampleColIndex = 0; // Default to first column
-      
-      if (sampleIds && sampleIds.length > 0) {
-        for (let i = 0; i < headers.length; i++) {
-          const colValues = rows.map(row => row[i]);
-          const matchCount = sampleIds.filter(s => colValues.includes(s)).length;
-          if (matchCount > sampleIds.length * 0.3) {
-            sampleColIndex = i;
-            break;
-          }
-        }
-      }
-
-      const sampleColumn = headers[sampleColIndex];
-      const annotationColumns = headers.filter((_, i) => i !== sampleColIndex);
-      const annotations: Record<string, Record<string, string>> = {};
-
-      for (const row of rows) {
-        const sampleId = row[sampleColIndex];
-        if (!sampleId) continue;
-        
-        annotations[sampleId] = {};
-        headers.forEach((col, i) => {
-          if (i !== sampleColIndex) {
-            annotations[sampleId][col] = row[i] || "";
-          }
-        });
-      }
-
-      const annot: AnnotationData = {
-        sampleColumn,
-        annotations,
-        columns: annotationColumns,
-      };
+      const annot = buildAnnotations(headers, rows, sampleIds ?? []);
 
       setAnnotationData(annot);
       setError("");
       onAnnotationLoaded(annot);
     } catch (err) {
-      setError("Failed to parse annotation file");
+      setError(err instanceof Error ? err.message : "Failed to parse annotation file");
     }
   }, [sampleIds, onAnnotationLoaded]);
 
@@ -113,6 +65,7 @@ export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds }: Annotation
   const reset = () => {
     setAnnotationData(null);
     setError("");
+    onRemove?.();
   };
 
   return (

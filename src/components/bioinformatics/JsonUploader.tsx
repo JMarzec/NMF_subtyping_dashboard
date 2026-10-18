@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Upload, FileJson, Check, AlertCircle, Download, HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { NmfSummary, SampleResult, MarkerGene, RankMetric, SurvivalDataPoint } from "@/data/mockNmfData";
+import { normalizeAnalysis, type AnalysisData } from "@/lib/analysisData";
 
 // Cox PH results from R (pre-computed)
 export interface CoxPHResultFromJSON {
@@ -22,22 +23,7 @@ export interface CoxPHResultFromJSON {
   };
 }
 
-export interface NmfData {
-  summary: NmfSummary;
-  samples: SampleResult[];
-  markerGenes: MarkerGene[];
-  heatmapData?: {
-    genes: string[];
-    samples: string[];
-    sampleSubtypes: string[];
-    values: number[][];
-  };
-  rankMetrics?: RankMetric[];
-  survivalData?: SurvivalDataPoint[];
-  // Pre-computed survival statistics from R
-  survival_pvalue?: number;
-  coxPHResults?: CoxPHResultFromJSON;
-}
+export type NmfData = AnalysisData;
 
 // Raw JSON format (may use different field names)
 interface RawNmfData {
@@ -63,49 +49,6 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
   const [message, setMessage] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
 
-  const validateAndNormalize = (data: unknown): NmfData | null => {
-    if (!data || typeof data !== "object") return null;
-    const d = data as RawNmfData;
-    
-    // Check for required fields (accept both 'samples' and 'sampleResults')
-    const samples = d.samples || d.sampleResults;
-    if (!d.summary || !samples || !d.markerGenes) return null;
-    
-    // Validate summary structure
-    const summary = d.summary as unknown as Record<string, unknown>;
-    if (
-      typeof summary.n_samples !== "number" ||
-      typeof summary.n_subtypes !== "number" ||
-      !summary.subtype_counts
-    ) {
-      return null;
-    }
-    
-    // Validate samples array
-    if (!Array.isArray(samples) || samples.length === 0) return null;
-    
-    // Validate markerGenes array
-    if (!Array.isArray(d.markerGenes)) return null;
-    
-    // Optional: validate rankMetrics if present
-    if (d.rankMetrics && !Array.isArray(d.rankMetrics)) return null;
-    
-    // Optional: validate survivalData if present
-    if (d.survivalData && !Array.isArray(d.survivalData)) return null;
-    
-    // Return normalized data with consistent field names
-    return {
-      summary: d.summary,
-      samples: samples,
-      markerGenes: d.markerGenes,
-      heatmapData: d.heatmapData,
-      rankMetrics: d.rankMetrics,
-      survivalData: d.survivalData,
-      survival_pvalue: d.survival_pvalue,
-      coxPHResults: d.coxPHResults,
-    };
-  };
-
   const processFile = useCallback(async (file: File) => {
     if (!file.name.endsWith(".json")) {
       setStatus("error");
@@ -117,7 +60,7 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
       const text = await file.text();
       const rawData = JSON.parse(text);
       
-      const normalizedData = validateAndNormalize(rawData);
+      const normalizedData = normalizeAnalysis(rawData);
       if (!normalizedData) {
         setStatus("error");
         setMessage("Invalid NMF data format. Expected: summary, samples (or sampleResults), markerGenes");
@@ -137,7 +80,7 @@ export const JsonUploader = ({ onDataLoaded }: JsonUploaderProps) => {
       setMessage(`Loaded ${normalizedData.summary.n_samples} samples with ${normalizedData.summary.n_subtypes} subtypes${featuresStr}`);
     } catch (err) {
       setStatus("error");
-      setMessage("Failed to parse JSON file");
+      setMessage(err instanceof Error ? `Invalid analysis: ${err.message}` : "Failed to parse JSON file");
     }
   }, [onDataLoaded]);
 

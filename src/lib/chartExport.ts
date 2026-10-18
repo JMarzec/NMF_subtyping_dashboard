@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import html2canvas from "html2canvas";
 import JSZip from "jszip";
 
@@ -66,6 +67,7 @@ export const downloadChartAsPNG = async (
     link.click();
   } catch (error) {
     console.error("Failed to export chart:", error);
+    toast.error("Chart export failed");
   }
 };
 
@@ -126,6 +128,7 @@ export const getChartAsPNGBlob = async (
     });
   } catch (error) {
     console.error("Failed to export chart:", error);
+    toast.error("Chart export failed");
     return null;
   }
 };
@@ -258,8 +261,8 @@ const applyComputedStylesToSVG = (svgElement: SVGElement, originalSvg: SVGElemen
 // Convert HTML element to SVG for cards/non-chart elements
 const convertHTMLToSVG = (element: HTMLElement): string => {
   const rect = element.getBoundingClientRect();
-  const width = rect.width;
-  const height = rect.height;
+  const width = Math.max(rect.width,element.scrollWidth);
+  const height = Math.max(rect.height,element.scrollHeight);
   
   // Create SVG with foreignObject containing the HTML
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -284,19 +287,23 @@ const convertHTMLToSVG = (element: HTMLElement): string => {
   clonedEl.style.margin = '0';
   clonedEl.style.fontFamily = 'Arial, sans-serif';
   
-  // Inline all computed styles for text visibility
-  const allElements = clonedEl.querySelectorAll('*');
-  allElements.forEach((child) => {
-    if (child instanceof HTMLElement) {
-      const computed = window.getComputedStyle(child);
-      child.style.color = computed.color || '#374151';
-      child.style.backgroundColor = computed.backgroundColor;
-      child.style.fontFamily = 'Arial, sans-serif';
-      child.style.fontSize = computed.fontSize;
-      child.style.fontWeight = computed.fontWeight;
+  clonedEl.setAttribute("xmlns","http://www.w3.org/1999/xhtml");
+  const originals=[element,...Array.from(element.querySelectorAll("*"))];
+  const clones=[clonedEl,...Array.from(clonedEl.querySelectorAll("*"))];
+  clones.forEach((child,i)=>{
+    const original=originals[i];if(!original)return;
+    const computed=window.getComputedStyle(original);
+    const css=Array.from(computed).map(key=>`${key}:${computed.getPropertyValue(key)};`).join("");
+    child.setAttribute("style",css);
+    if(child instanceof HTMLCanvasElement && original instanceof HTMLCanvasElement){
+      const image=document.createElement("img");image.src=original.toDataURL();image.width=original.width;image.height=original.height;child.replaceWith(image);
     }
   });
-  
+  clonedEl.style.margin="0";
+  clonedEl.style.width=`${width}px`;
+  clonedEl.style.height=`${height}px`;
+  clonedEl.style.overflow="visible";
+
   foreignObject.appendChild(clonedEl);
   svg.appendChild(foreignObject);
   
@@ -321,87 +328,14 @@ export const getSVGAsString = (
     return convertHTMLToSVG(containerElement);
   }
 
-  // Find the chart SVG specifically - look for Recharts container or the largest SVG
-  // Avoid icon SVGs (small, typically in buttons) by checking size and context
-  const allSvgs = containerElement.querySelectorAll('svg');
-  let chartSvg: SVGElement | null = null;
-  let maxArea = 0;
-
-  allSvgs.forEach((svg) => {
-    // Skip SVGs inside buttons (likely icons)
-    if (svg.closest('button')) return;
-    
-    // Skip very small SVGs (icons are typically < 32px)
-    const width = svg.getBoundingClientRect().width;
-    const height = svg.getBoundingClientRect().height;
-    const area = width * height;
-    
-    // Look for the largest SVG that's not an icon
-    if (width > 50 && height > 50 && area > maxArea) {
-      maxArea = area;
-      chartSvg = svg as SVGElement;
-    }
-  });
-
-  // Fallback: try to find SVG in recharts-wrapper or similar chart containers
-  if (!chartSvg) {
-    chartSvg = containerElement.querySelector('.recharts-wrapper svg') as SVGElement | null;
-  }
-
-  if (!chartSvg) return null;
-
-  const clonedSvg = chartSvg.cloneNode(true) as SVGElement;
-  
-  // Set proper dimensions
-  const rect = chartSvg.getBoundingClientRect();
-  clonedSvg.setAttribute('width', String(rect.width));
-  clonedSvg.setAttribute('height', String(rect.height));
-  clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  
-  // Apply computed styles from original SVG to cloned SVG
-  applyComputedStylesToSVG(clonedSvg, chartSvg);
-  
-  // Add white background
-  const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  bgRect.setAttribute('width', '100%');
-  bgRect.setAttribute('height', '100%');
-  bgRect.setAttribute('fill', 'white');
-  clonedSvg.insertBefore(bgRect, clonedSvg.firstChild);
-
-  const serializer = new XMLSerializer();
-  return serializer.serializeToString(clonedSvg);
+  // Preserve every chart, legend, risk table and result in the panel.
+  return convertHTMLToSVG(containerElement);
 };
 
-export const downloadRechartsAsSVG = (
-  containerElement: HTMLElement | null,
-  filename: string
-): void => {
-  if (!containerElement) return;
-
-  const svgElement = containerElement.querySelector('svg');
-  if (!svgElement) {
-    console.error("No SVG element found in container");
-    return;
-  }
-
-  const clonedSvg = svgElement.cloneNode(true) as SVGElement;
-  
-  // Set proper dimensions
-  const rect = svgElement.getBoundingClientRect();
-  clonedSvg.setAttribute('width', String(rect.width));
-  clonedSvg.setAttribute('height', String(rect.height));
-  clonedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-  
-  // Apply computed styles from original to cloned
-  applyComputedStylesToSVG(clonedSvg, svgElement);
-  
-  const bgRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-  bgRect.setAttribute('width', '100%');
-  bgRect.setAttribute('height', '100%');
-  bgRect.setAttribute('fill', 'white');
-  clonedSvg.insertBefore(bgRect, clonedSvg.firstChild);
-
-  downloadSVGAsFile(clonedSvg, filename);
+export const downloadRechartsAsSVG = (containerElement:HTMLElement|null,filename:string):void => {
+  const content=getSVGAsString(containerElement);if(!content){toast.error("No chart available to export");return;}
+  const url=URL.createObjectURL(new Blob([content],{type:"image/svg+xml"}));
+  const link=document.createElement("a");link.download=`${filename}.svg`;link.href=url;link.click();URL.revokeObjectURL(url);
 };
 
 export interface ChartRef {
@@ -425,6 +359,8 @@ export const exportAllAsZip = async (
   filename: string = 'nmf-visualizations',
   onProgress?: (progress: ExportProgress) => void
 ): Promise<void> => {
+  await document.fonts.ready;
+  const failures:string[]=[];
   const zip = new JSZip();
   const folder = zip.folder(filename);
   
@@ -447,26 +383,28 @@ export const exportAllAsZip = async (
         const blob = await getChartAsPNGBlob(chart.ref, chart.pngOptions);
         if (blob) {
           folder.file(`${chart.name}.png`, blob);
-        }
+        } else failures.push(chart.name);
       } else {
         // For heatmap, use custom SVG generator if provided
         if (chart.type === 'heatmap' && chart.getSVGString) {
           const svgString = chart.getSVGString();
           if (svgString) {
             folder.file(`${chart.name}.svg`, svgString);
-          }
+          } else failures.push(chart.name);
         } else if (chart.type !== 'heatmap') {
           const svgString = getSVGAsString(chart.ref, chart.type);
           if (svgString) {
             folder.file(`${chart.name}.svg`, svgString);
-          }
+          } else failures.push(chart.name);
         }
       }
     } catch (error) {
       console.error(`Failed to export ${chart.name}:`, error);
+      failures.push(chart.name);
     }
   }
 
+  if(failures.length)throw new Error(`Export incomplete: ${failures.join(", ")}`);
   const content = await zip.generateAsync({ type: "blob" });
   const url = URL.createObjectURL(content);
   

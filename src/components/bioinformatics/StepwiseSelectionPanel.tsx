@@ -127,7 +127,7 @@ export const StepwiseSelectionPanel = ({ result, onApplyFinal }: StepwiseSelecti
           )}
         </div>
         <div className="flex gap-2">
-          {onApplyFinal && result.finalCovariates.length > 0 && (
+          {onApplyFinal && (
             <Button 
               variant="default" 
               size="sm" 
@@ -265,7 +265,7 @@ export const StepwiseSelectionPanel = ({ result, onApplyFinal }: StepwiseSelecti
         </div>
         
         <div className="mt-3 text-xs text-muted-foreground text-center">
-          Stepwise selection alternates between adding (p &lt; {result.threshold}) and removing (p &gt; {(result.threshold * 2).toFixed(2)}) covariates.
+          Stepwise selection alternates between adding (p &lt; {result.threshold}) and removing (p &gt; {(result.removalThreshold ?? 0.10).toFixed(2)}) covariates.
         </div>
       </CardContent>
     </Card>

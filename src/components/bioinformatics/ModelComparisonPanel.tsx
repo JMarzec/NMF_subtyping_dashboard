@@ -60,7 +60,7 @@ export const ModelComparisonPanel = ({ comparisons }: ModelComparisonPanelProps)
     URL.revokeObjectURL(url);
   };
 
-  const { significantSteps, bestModel } = useMemo(() => {
+  const { significantSteps, bestModel } = (() => {
     const significant = comparisons.filter(c => c.significantImprovement).length;
     
     let minAIC = Infinity;
@@ -76,7 +76,7 @@ export const ModelComparisonPanel = ({ comparisons }: ModelComparisonPanelProps)
       significantSteps: significant,
       bestModel: bestIdx >= 0 ? comparisons[bestIdx] : null
     };
-  }, [comparisons]);
+  })();
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
