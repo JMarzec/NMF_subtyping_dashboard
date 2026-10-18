@@ -1,3 +1,6 @@
+import Papa from "papaparse";
+import { useClustering } from "@/hooks/useClustering";
+import { HeatmapCanvas } from "./HeatmapCanvas";
 import { hierarchicalCluster, matrixExtent, type ClusteringMethod, type DistanceMetric } from "@/lib/clustering";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -235,51 +238,15 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
     };
   }, [geneFilteredData, excludedSubtypes, excludedAnnotationValues, selectedAnnotation, userAnnotations]);
 
-  const { displayValues, minVal, maxVal, sortedSampleIndices, sortedGeneIndices, uniqueSubtypes, sampleDendrogram, geneDendrogram } = useMemo(() => {
-    const normalizedValues = useZScore ? zScoreNormalize(filteredData.values) : filteredData.values;
-    const allValues = normalizedValues.flat();
-    const { min, max } = matrixExtent(normalizedValues);
-
-    // Cluster or sort samples
-    let sampleIndices: number[];
-    let sampleTree: DendrogramNode | null = null;
-    if (sampleClusterMethod !== "none" && filteredData.samples.length > 1) {
-      const transposedData = transpose(normalizedValues);
-      const result = hierarchicalCluster(transposedData, distanceMetric !== "euclidean" && sampleClusterMethod === "ward" ? "average" : sampleClusterMethod, distanceMetric);
-      sampleIndices = result.order;
-      sampleTree = result.tree;
-    } else {
-      // Sort by subtype when not clustering
-      sampleIndices = filteredData.sampleSubtypes
-        .map((subtype, idx) => ({ subtype, idx }))
-        .sort((a, b) => a.subtype.localeCompare(b.subtype))
-        .map(item => item.idx);
-    }
-
-    // Cluster or keep original gene order
-    let geneIndices: number[];
-    let geneTree: DendrogramNode | null = null;
-    if (geneClusterMethod !== "none" && filteredData.genes.length > 1) {
-      const result = hierarchicalCluster(normalizedValues, distanceMetric !== "euclidean" && geneClusterMethod === "ward" ? "average" : geneClusterMethod, distanceMetric);
-      geneIndices = result.order;
-      geneTree = result.tree;
-    } else {
-      geneIndices = filteredData.genes.map((_, i) => i);
-    }
-
-    const subtypes = [...new Set(geneFilteredData.sampleSubtypes)].sort(); // Use original data for all subtypes
-
-    return {
-      displayValues: normalizedValues,
-      minVal: min,
-      maxVal: max,
-      sortedSampleIndices: sampleIndices,
-      sortedGeneIndices: geneIndices,
-      uniqueSubtypes: subtypes,
-      sampleDendrogram: sampleTree,
-      geneDendrogram: geneTree,
-    };
-  }, [filteredData, geneFilteredData.sampleSubtypes, useZScore, sampleClusterMethod, geneClusterMethod, distanceMetric]);
+  const displayValues=useMemo(()=>useZScore?zScoreNormalize(filteredData.values):filteredData.values,[useZScore,filteredData.values]);
+  const transposed=useMemo(()=>transpose(displayValues),[displayValues]);
+  const samplesCluster=useClustering(transposed,sampleClusterMethod,distanceMetric);
+  const genesCluster=useClustering(displayValues,geneClusterMethod,distanceMetric);
+  const sortedSampleIndices=samplesCluster.order.length===filteredData.samples.length?samplesCluster.order:filteredData.samples.map((_,i)=>i);
+  const sortedGeneIndices=genesCluster.order.length===filteredData.genes.length?genesCluster.order:filteredData.genes.map((_,i)=>i);
+  const sampleDendrogram=samplesCluster.tree,geneDendrogram=genesCluster.tree;
+  const {min:minVal,max:maxVal}=useMemo(()=>matrixExtent(displayValues),[displayValues]);
+  const uniqueSubtypes=useMemo(()=>[...new Set(geneFilteredData.sampleSubtypes)].sort(),[geneFilteredData.sampleSubtypes]);
 
   const cellWidth = Math.max(4, Math.min(10, 600 / filteredData.samples.length));
   const cellHeight = 12;
@@ -312,9 +279,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
       ...sortedSampleIndices.map(sampleIdx => displayValues[geneIdx][sampleIdx].toFixed(4))
     ]);
 
-    const csvContent = [header, subtypeRow, ...dataRows]
-      .map(row => row.join(","))
-      .join("\n");
+    const csvContent = Papa.unparse([header, subtypeRow, ...dataRows]);
 
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -728,7 +693,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
     });
 
     // User annotation legend (if selected) - always render if annotation is selected
-    if (selectedAnnotation && userAnnotations) {
+    if (selectedAnnotation && userAnnotations && !isNumericAnnotation) {
       const userAnnotLegendY = subtypeLegendY + 22;
       let annotXOffset = padding.left;
 
@@ -777,13 +742,18 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
       }
     }
 
+    if(selectedAnnotation && isNumericAnnotation && continuousColorScale){
+      const y=subtypeLegendY+32,x=padding.left;
+      const label=document.createElementNS(svgNS,"text");label.setAttribute("x",String(x));label.setAttribute("y",String(y));label.setAttribute("font-size","10");label.textContent=`${selectedAnnotation}: ${continuousColorScale.min.toFixed(1)} – ${continuousColorScale.max.toFixed(1)}`;svg.appendChild(label);
+      for(let i=0;i<100;i++){const rect=document.createElementNS(svgNS,"rect");rect.setAttribute("x",String(x+i*2));rect.setAttribute("y",String(y+5));rect.setAttribute("width","2");rect.setAttribute("height","10");rect.setAttribute("fill",continuousColorScale.getColor(continuousColorScale.min+i/99*(continuousColorScale.max-continuousColorScale.min)));svg.appendChild(rect);}
+    }
     const serializer = new XMLSerializer();
     return serializer.serializeToString(svg);
   }, [
     cellWidth, cellHeight, filteredData, showDendrograms, sampleDendrogram, geneDendrogram,
     sampleClusterMethod, geneClusterMethod, selectedAnnotation, userAnnotations,
     userAnnotationColors, sortedSampleIndices, sortedGeneIndices, displayValues,
-    minVal, maxVal, subtypeColors, uniqueSubtypes, getDendrogramLines, useZScore
+    minVal, maxVal, subtypeColors, uniqueSubtypes, getDendrogramLines, useZScore, isNumericAnnotation, continuousColorScale
   ]);
 
   // Expose getSVGString via ref for batch export
@@ -1022,25 +992,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
           {/* Heatmap grid with gene dendrogram on RIGHT */}
           <div className="flex">
             {/* Heatmap cells */}
-            <div>
-              {sortedGeneIndices.map((geneIdx) => (
-                <div key={geneIdx} className="flex">
-                  {sortedSampleIndices.map((sampleIdx, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        width: cellWidth,
-                        height: cellHeight,
-                        backgroundColor: getHeatmapColor(displayValues[geneIdx][sampleIdx], minVal, maxVal),
-                      }}
-                      className="cursor-pointer hover:ring-1 hover:ring-white hover:z-10"
-                      onMouseEnter={(e) => handleCellHover(e, geneIdx, sampleIdx)}
-                      onMouseLeave={() => setHoveredCell(null)}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
+            <HeatmapCanvas values={displayValues} genes={sortedGeneIndices} samples={sortedSampleIndices} cellWidth={cellWidth} cellHeight={cellHeight} color={value=>getHeatmapColor(value,minVal,maxVal)} onHover={handleCellHover} onLeave={()=>setHoveredCell(null)} />
 
             {/* Gene dendrogram (vertical, right of heatmap) */}
             {showDendrograms && geneDendrogram && geneClusterMethod !== "none" && (
