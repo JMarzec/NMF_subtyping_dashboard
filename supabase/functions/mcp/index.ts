@@ -27,6 +27,7 @@ var whoami_default = defineTool({
 });
 
 // src/lib/mcp/tools/list-analyses.ts
+import { z } from "npm:zod@^3.25.76";
 import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.23.0";
 
 // src/lib/mcp/_supabase.ts
@@ -51,13 +52,13 @@ var list_analyses_default = defineTool2({
   name: "list_analyses",
   title: "List NMF analyses",
   description: "List the signed-in user's saved NMF analyses (id, name, creation date, and summary size).",
-  inputSchema: {},
+  inputSchema: { offset: z.number().int().nonnegative().optional(), pageSize: z.number().int().min(1).max(100).optional() },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async (_input, ctx) => {
+  handler: async ({ offset = 0, pageSize = 100 }, ctx) => {
     const err = requireAuth(ctx);
     if (err) return err;
     const sb = supabaseForUser(ctx);
-    const { data, error } = await sb.from("analyses").select("id, name, created_at, summary, survival_pvalue").order("created_at", { ascending: false });
+    const { data, error } = await sb.from("analyses").select("id, name, created_at, summary, survival_pvalue").order("created_at", { ascending: false }).order("id", { ascending: false }).range(offset, offset + pageSize - 1);
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     const rows = (data ?? []).map((a) => ({
       id: a.id,
@@ -69,19 +70,19 @@ var list_analyses_default = defineTool2({
     }));
     return {
       content: [{ type: "text", text: JSON.stringify(rows, null, 2) }],
-      structuredContent: { analyses: rows }
+      structuredContent: { analyses: rows, nextOffset: rows.length === pageSize ? offset + pageSize : null }
     };
   }
 });
 
 // src/lib/mcp/tools/get-analysis-summary.ts
 import { defineTool as defineTool3 } from "npm:@lovable.dev/mcp-js@0.23.0";
-import { z } from "npm:zod@^3.25.76";
+import { z as z2 } from "npm:zod@^3.25.76";
 var get_analysis_summary_default = defineTool3({
   name: "get_analysis_summary",
   title: "Get analysis summary",
   description: "Fetch the summary (optimal rank, subtype counts, n_samples) for one saved NMF analysis.",
-  inputSchema: { analysisId: z.string().describe("Analysis id from list_analyses.") },
+  inputSchema: { analysisId: z2.string().describe("Analysis id from list_analyses.") },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ analysisId }, ctx) => {
     const err = requireAuth(ctx);
@@ -99,47 +100,52 @@ var get_analysis_summary_default = defineTool3({
 
 // src/lib/mcp/tools/get-marker-genes.ts
 import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.23.0";
-import { z as z2 } from "npm:zod@^3.25.76";
+import { z as z3 } from "npm:zod@^3.25.76";
 var get_marker_genes_default = defineTool4({
   name: "get_marker_genes",
   title: "Get marker genes",
   description: "Return top marker genes per subtype for one saved analysis. topN defaults to 25 per subtype.",
   inputSchema: {
-    analysisId: z2.string(),
-    topN: z2.number().int().positive().optional().describe("Genes per subtype (default 25)."),
-    subtype: z2.string().optional().describe("Filter to a single subtype.")
+    analysisId: z3.string(),
+    offset: z3.number().int().nonnegative().optional(),
+    pageSize: z3.number().int().min(1).max(500).optional(),
+    topN: z3.number().int().min(1).max(100).optional().describe("Genes per subtype (default 25)."),
+    subtype: z3.string().optional().describe("Filter to a single subtype.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ analysisId, topN, subtype }, ctx) => {
+  handler: async ({ analysisId, topN, subtype, offset = 0, pageSize = 100 }, ctx) => {
     const err = requireAuth(ctx);
     if (err) return err;
     const sb = supabaseForUser(ctx);
     const limit = topN ?? 25;
-    let q = sb.from("analysis_marker_genes").select("gene, subtype, log_fold_change, p_value, rank").eq("analysis_id", analysisId).order("subtype", { ascending: true }).order("rank", { ascending: true });
-    if (subtype) q = q.eq("subtype", subtype);
-    const { data, error } = await q;
+    const { data: analysis, error } = await sb.from("analyses").select("document").eq("id", analysisId).maybeSingle();
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
-    const bySubtype = {};
-    for (const row of data ?? []) {
-      (bySubtype[row.subtype] ||= []).push(row);
+    if (!analysis?.document) return { content: [{ type: "text", text: "Analysis unavailable; re-import legacy data" }], isError: true };
+    const document = analysis.document;
+    const groups = /* @__PURE__ */ new Map();
+    for (const marker of document.markerGenes ?? []) {
+      if (subtype && marker.subtype !== subtype) continue;
+      const entries = groups.get(marker.subtype) ?? [];
+      entries.push(marker);
+      groups.set(marker.subtype, entries);
     }
-    const trimmed = [];
-    for (const s of Object.keys(bySubtype)) trimmed.push(...bySubtype[s].slice(0, limit));
+    const all = [...groups.keys()].sort().flatMap((s) => (groups.get(s) ?? []).sort((a, b) => b.weight - a.weight).slice(0, limit));
+    const trimmed = all.slice(offset, offset + pageSize);
     return {
       content: [{ type: "text", text: JSON.stringify(trimmed, null, 2) }],
-      structuredContent: { markerGenes: trimmed }
+      structuredContent: { markerGenes: trimmed, nextOffset: offset + pageSize < all.length ? offset + pageSize : null }
     };
   }
 });
 
 // src/lib/mcp/tools/get-survival-stats.ts
 import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.23.0";
-import { z as z3 } from "npm:zod@^3.25.76";
+import { z as z4 } from "npm:zod@^3.25.76";
 var get_survival_stats_default = defineTool5({
   name: "get_survival_stats",
   title: "Get survival statistics",
   description: "Return log-rank p-value and Cox PH hazard ratios / CIs for one saved analysis.",
-  inputSchema: { analysisId: z3.string() },
+  inputSchema: { analysisId: z4.string() },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ analysisId }, ctx) => {
     const err = requireAuth(ctx);
