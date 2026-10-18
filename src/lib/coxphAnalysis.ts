@@ -245,7 +245,9 @@ export function crossValidateConcordance(outcomes:SurvivalObservation[],data:Cov
 }
 export function observedGroupCox(outcomes:SurvivalObservation[],groups:Record<string,string>,strata?:Record<string,string>):CoxPHResult|null{
   const matched=outcomes.filter(o=>groups[o.sample_id] && (!strata||strata[o.sample_id]));
-  const model=multivariateCoxPH(matched,{group:groups},undefined,undefined,strata);
+  // Prefix numeric labels so grouping remains categorical, not a continuous trend.
+  const categorical=Object.fromEntries(Object.entries(groups).map(([id,g])=>[id,`group:${g}`]));
+  const model=multivariateCoxPH(matched,{group:categorical},undefined,undefined,strata);
   if(!model)return null;
   const levels=[...new Set(matched.map(o=>groups[o.sample_id]))].sort();
   return {referenceGroup:levels[0],groups:model.covariates.map((c,i)=>({...c,subtype:levels[i+1]})),waldTest:model.waldTest};

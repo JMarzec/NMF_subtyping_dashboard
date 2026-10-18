@@ -119,15 +119,18 @@ export function kaplanMeier(outcomes: SurvivalObservation[], groups: Record<stri
   });
 }
 
-export function logRankObserved(outcomes: SurvivalObservation[], groups: Record<string,string>) {
-  const rows=outcomes.filter(o=>groups[o.sample_id]),names=[...new Set(rows.map(o=>groups[o.sample_id]))].sort(),p=names.length-1;
+export function logRankObserved(outcomes: SurvivalObservation[], groups: Record<string,string>, strata?:Record<string,string>) {
+  const rows=outcomes.filter(o=>groups[o.sample_id]&&(!strata||strata[o.sample_id])),names=[...new Set(rows.map(o=>groups[o.sample_id]))].sort(),p=names.length-1;
   if(p<1)return null;
   const u=Array(p).fill(0),v=Array.from({length:p},()=>Array(p).fill(0));
-  for(const time of new Set(rows.filter(o=>o.event===1).map(o=>o.time))){
-    const risk=rows.filter(o=>o.time>=time),deaths=rows.filter(o=>o.time===time&&o.event===1),n=risk.length,d=deaths.length;
+  for(const stratum of new Set(rows.map(o=>strata?.[o.sample_id]??"all"))){
+   const members=rows.filter(o=>(strata?.[o.sample_id]??"all")===stratum);
+   for(const time of new Set(members.filter(o=>o.event===1).map(o=>o.time))){
+    const risk=members.filter(o=>o.time>=time),deaths=members.filter(o=>o.time===time&&o.event===1),n=risk.length,d=deaths.length;
     if(n<=1)continue;
     const prop=names.slice(0,p).map(g=>risk.filter(o=>groups[o.sample_id]===g).length/n),factor=d*(n-d)/(n-1);
     for(let j=0;j<p;j++){u[j]+=deaths.filter(o=>groups[o.sample_id]===names[j]).length-d*prop[j];for(let k=0;k<p;k++)v[j][k]+=factor*((j===k?prop[j]:0)-prop[j]*prop[k]);}
+   }
   }
   try{const chiSquare=Math.max(0,dot(u,multiply(invert(v),u)));return {chiSquare,pValue:chiSquareTail(chiSquare,p),degreesOfFreedom:p};}catch{return null;}
 }
