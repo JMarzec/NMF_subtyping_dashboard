@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Area, ComposedChart, Line } from "recharts";
-import { RankMetric, defaultRankMetrics } from "@/data/mockNmfData";
+import { RankMetric } from "@/data/mockNmfData";
 import { useRef } from "react";
 import { Download } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";

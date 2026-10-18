@@ -1,4 +1,4 @@
-import { kaplanMeier } from "@/lib/survivalEngine";
+import { kaplanMeier,logRankObserved } from "@/lib/survivalEngine";
 import type { SurvivalObservation } from "@/lib/analysisData";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -129,9 +129,10 @@ export const SurvivalCurve = ({
     const counts=isAnnotationGrouping?Object.fromEntries(curves.map(g=>[g.subtype,g.nTotal ?? 0])):subtypeCounts;
     return {effectiveData:curves,effectiveColors:isAnnotationGrouping?generateAnnotationColors(curves.map(g=>g.subtype)):subtypeColors,effectiveCounts:counts,isAnnotationGrouping};
   },[data,rawSurvivalData,groupAssignments,groupBy,subtypeCounts,subtypeColors]);
-  const isPrecomputedPValue=survivalPValue!==undefined && !isAnnotationGrouping;
+  const strata=useMemo(()=>stratifyBy === "none" ? undefined : Object.fromEntries(Object.entries(userAnnotations?.annotations ?? {}).flatMap(([id,cols])=>cols[stratifyBy]?[[id,cols[stratifyBy]]]:[])),[stratifyBy,userAnnotations]);
+  const isPrecomputedPValue=survivalPValue!==undefined && !isAnnotationGrouping && stratifyBy==="none";
   const isPrecomputedCoxPH=!!coxPHResults && !isAnnotationGrouping && stratifyBy==="none";
-  const logRankResult=useMemo(()=>isPrecomputedPValue?{pValue:survivalPValue ?? 1,chiSquare:0,degreesOfFreedom:0}:logRankTest(rawSurvivalData,groupAssignments),[isPrecomputedPValue,survivalPValue,rawSurvivalData,groupAssignments]);
+  const logRankResult=useMemo(()=>isPrecomputedPValue?{pValue:survivalPValue ?? 1,chiSquare:0,degreesOfFreedom:0}:logRankObserved(rawSurvivalData,groupAssignments,strata),[isPrecomputedPValue,survivalPValue,rawSurvivalData,groupAssignments,strata]);
   const {coxPHResult,isStratified}=useMemo(()=>{
     if(isPrecomputedCoxPH)return {coxPHResult:coxPHResults,isStratified:false};
     const strata=stratifyBy === "none" ? undefined : Object.fromEntries(Object.entries(userAnnotations?.annotations ?? {}).flatMap(([id,cols])=>cols[stratifyBy]?[[id,cols[stratifyBy]]]:[]));
@@ -904,7 +905,7 @@ export const SurvivalCurve = ({
                   <Area
                     key={`${subtype}-ci`}
                     type="stepAfter"
-                    dataKey={`${subtype}_upper`}
+                    dataKey={(row:Record<string,number|undefined>)=>row[`${subtype}_lower`]===undefined||row[`${subtype}_upper`]===undefined?undefined:[row[`${subtype}_lower`],row[`${subtype}_upper`]]}
                     fill={color}
                     fillOpacity={0.1}
                     stroke={color}

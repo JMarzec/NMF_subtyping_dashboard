@@ -23,22 +23,25 @@ export function AnalysisManager({ data, onLoad }: Props) {
   const activeUser=useRef(user?.id);
   activeUser.current=user?.id;
   const loadSequence=useRef(0);
+  const refreshSequence=useRef(0);
+  const rowsCount=useRef(0);
   const [hasMore,setHasMore]=useState(false);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [analyses, setAnalyses] = useState<AnalysisRow[]>([]);
+  rowsCount.current=analyses.length;
   const [selected, setSelected] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async (append=false) => {
     if (!user) { setAnalyses([]); setSelected(""); return; }
-    const userId=user.id,offset=append?analyses.length:0;
+    const sequence=++refreshSequence.current,userId=user.id,offset=append?rowsCount.current:0;
     const {data:rows,error}=await supabase.from("analyses").select("id,name,created_at").order("created_at",{ascending:false}).order("id",{ascending:false}).range(offset,offset+99);
-    if(activeUser.current!==userId)return;
+    if(activeUser.current!==userId||sequence!==refreshSequence.current)return;
     if(error){toast.error(error.message);return;}
-    setAnalyses(previous=>append?[...previous,...(rows??[])]:rows??[]);setHasMore(rows?.length===100);
-  },[user,analyses.length]);
-  useEffect(()=>{setSelected("");setAnalyses([]);loadSequence.current++;void refresh();},[user?.id]);
+    setAnalyses(previous=>append?[...new Map([...previous,...(rows??[])].map(r=>[r.id,r])).values()]:rows??[]);setHasMore(rows?.length===100);
+  },[user]);
+  useEffect(()=>{setSelected("");setAnalyses([]);loadSequence.current++;void refresh();},[refresh]);
 
   const save = async () => {
     if(!user){toast.error("Sign in to save analyses");return;}
