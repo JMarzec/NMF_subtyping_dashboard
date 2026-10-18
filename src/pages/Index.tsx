@@ -30,6 +30,7 @@ import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import AccelBioLogo from "@/assets/AccelBio_logo.png";
 import { Helmet } from "react-helmet-async";
+import { PlotFiltersProvider } from "@/components/bioinformatics/PlotFilters";
 
 const Index = () => {
   const [data, setData] = useState<NmfData>({
@@ -228,6 +229,7 @@ const Index = () => {
         {/* Saved analyses */}
         <AnalysisManager data={{...data, annotations:userAnnotations}} onLoad={handleDataLoaded} />
 
+        <PlotFiltersProvider key={filterResetKey}>
         {/* Summary Cards - Full Width */}
         <div ref={summaryRef}>
           <SummaryCards 
@@ -312,6 +314,7 @@ const Index = () => {
             sampleSubtypes={sampleSubtypes}
           />
         </div>
+        </PlotFiltersProvider>
       </main>
 
       {/* Footer */}

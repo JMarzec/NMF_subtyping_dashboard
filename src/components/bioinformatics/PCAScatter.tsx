@@ -10,6 +10,7 @@ import { AnnotationData } from "./AnnotationUploader";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { usePlotFilters } from "./PlotFilters";
 
 interface HeatmapData {
   genes: string[];
@@ -35,9 +36,7 @@ const computePCAFromNMF = (samples: { scores: number[] }[]) => {
 const computePCAFromExpression = (values:number[][],_nGenes:number,nSamples:number) => computePCAFromNMF(Array.from({length:nSamples},(_,i)=>({scores:values.map(r=>r[i])})));
 
 export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapData, filterResetKey }: PCAScatterProps) => {
-  const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
-  const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
-  const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
+  const {selectedAnnotation,setSelectedAnnotation,excludedSubtypes,setExcludedSubtypes,excludedAnnotationValues,setExcludedAnnotationValues}=usePlotFilters();
   const [dataSource, setDataSource] = useState<PCADataSource>("expression");
   const chartRef = useRef<HTMLDivElement>(null);
 
@@ -101,7 +100,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
         }
       }
       // Also filter by subtypes if not using annotation coloring
-      if (!selectedAnnotation && excludedSubtypes.has(s.subtype)) {
+      if (excludedSubtypes.has(s.subtype)) {
         return false;
       }
       return true;

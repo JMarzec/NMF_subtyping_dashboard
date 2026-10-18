@@ -15,6 +15,7 @@ import { Dendrogram, DendrogramNode } from "./Dendrogram";
 import html2canvas from "html2canvas";
 
 import { AnnotationData } from "./AnnotationUploader";
+import { usePlotFilters } from "./PlotFilters";
 
 interface HeatmapData {
   genes: string[];
@@ -82,13 +83,11 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
   const [hoveredCell, setHoveredCell] = useState<{ gene: string; sample: string; value: number; subtype: string; userAnnotation?: string } | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [useZScore, setUseZScore] = useState(false);
-  const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
+  const {selectedAnnotation,setSelectedAnnotation,excludedSubtypes,setExcludedSubtypes,excludedAnnotationValues,setExcludedAnnotationValues}=usePlotFilters();
   const [sampleClusterMethod, setSampleClusterMethod] = useState<ClusteringMethod>("ward");
   const [geneClusterMethod, setGeneClusterMethod] = useState<ClusteringMethod>("ward");
   const [distanceMetric, setDistanceMetric] = useState<DistanceMetric>("euclidean");
   const [showDendrograms, setShowDendrograms] = useState(true);
-  const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
-  const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
 
   // Reset filters when global reset key changes
   React.useEffect(() => {

@@ -8,6 +8,7 @@ import { Download, RotateCcw } from "lucide-react";
 import { AnnotationSelector } from "./AnnotationSelector";
 import { AnnotationData } from "./AnnotationUploader";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
+import { usePlotFilters } from "./PlotFilters";
 
 interface ClusterScatterProps {
   samples: SampleResult[];
@@ -17,9 +18,7 @@ interface ClusterScatterProps {
 }
 
 export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filterResetKey }: ClusterScatterProps) => {
-  const [selectedAnnotation, setSelectedAnnotation] = useState<string | null>(null);
-  const [excludedSubtypes, setExcludedSubtypes] = useState<Set<string>>(new Set());
-  const [excludedAnnotationValues, setExcludedAnnotationValues] = useState<Set<string>>(new Set());
+  const {selectedAnnotation,setSelectedAnnotation,excludedSubtypes,setExcludedSubtypes,excludedAnnotationValues,setExcludedAnnotationValues}=usePlotFilters();
   const chartRef = useRef<HTMLDivElement>(null);
 
   // Reset filters when global reset key changes
@@ -70,7 +69,7 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filter
         }
       }
       // Also filter by subtypes if not using annotation coloring
-      if (!selectedAnnotation && excludedSubtypes.has(s.subtype)) {
+      if (excludedSubtypes.has(s.subtype)) {
         return false;
       }
       return true;
