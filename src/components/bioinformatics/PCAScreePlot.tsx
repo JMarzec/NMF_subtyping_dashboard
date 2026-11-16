@@ -8,6 +8,8 @@ import { useMemo, useRef, useState } from "react";
 import { Download } from "lucide-react";
 import { downloadChartAsPNG, downloadRechartsAsSVG } from "@/lib/chartExport";
 import { SampleResult } from "@/data/mockNmfData";
+import {usePlotFilters} from "./PlotFilters";
+import {plotCohort} from "@/lib/plotCohort";
 
 interface HeatmapData {
   genes: string[];
@@ -21,6 +23,7 @@ type PCADataSource = "expression" | "nmf";
 interface PCAScreePlotProps {
   heatmapData: HeatmapData;
   samples: SampleResult[];
+  annotations?:Record<string,Record<string,string>>;
 }
 
 const varianceResult=(rows:number[][])=>{
@@ -30,16 +33,19 @@ const varianceResult=(rows:number[][])=>{
 const computeAllPCAVariance=(values:number[][],_nGenes:number,nSamples:number)=>varianceResult(Array.from({length:nSamples},(_,i)=>values.map(r=>r[i])));
 const computeNMFVariance=(samples:SampleResult[])=>varianceResult(nmfVectors(samples));
 
-export const PCAScreePlot = ({ heatmapData, samples }: PCAScreePlotProps) => {
+export const PCAScreePlot = ({ heatmapData, samples,annotations }: PCAScreePlotProps) => {
+  const filters=usePlotFilters();
+  const visibleSamples=useMemo(()=>plotCohort(samples,filters.excludedSubtypes,filters.selectedAnnotation,filters.excludedAnnotationValues,annotations),[samples,filters.excludedSubtypes,filters.selectedAnnotation,filters.excludedAnnotationValues,annotations]);
+  const visibleHeatmap=useMemo(()=>{const ids=new Set(visibleSamples.map(s=>s.sample_id)),indices=heatmapData.samples.flatMap((id,i)=>ids.has(id)?[i]:[]);return {...heatmapData,samples:indices.map(i=>heatmapData.samples[i]),values:heatmapData.values.map(r=>indices.map(i=>r[i]))};},[visibleSamples,heatmapData]);
   const chartRef = useRef<HTMLDivElement>(null);
   const [dataSource, setDataSource] = useState<PCADataSource>("expression");
 
   const chartData = useMemo(() => {
     if (dataSource === "expression") {
       const { variances, cumulative } = computeAllPCAVariance(
-        heatmapData.values, 
+        visibleHeatmap.values, 
         heatmapData.genes.length, 
-        heatmapData.samples.length
+        visibleHeatmap.samples.length
       );
 
       return variances.map((variance, idx) => ({
@@ -49,7 +55,7 @@ export const PCAScreePlot = ({ heatmapData, samples }: PCAScreePlotProps) => {
         cumulative: cumulative[idx],
       }));
     } else {
-      const { variances, cumulative } = computeNMFVariance(samples);
+      const { variances, cumulative } = computeNMFVariance(visibleSamples);
 
       return variances.map((variance, idx) => ({
         pc: `PC${idx + 1}`,
@@ -58,7 +64,7 @@ export const PCAScreePlot = ({ heatmapData, samples }: PCAScreePlotProps) => {
         cumulative: cumulative[idx],
       }));
     }
-  }, [heatmapData, samples, dataSource]);
+  }, [heatmapData, visibleHeatmap,visibleSamples, dataSource]);
 
   const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "pca-scree-plot");

@@ -95,7 +95,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
       setExcludedSubtypes(new Set());
       setExcludedAnnotationValues(new Set());
     }
-  }, [filterResetKey]);
+  }, [filterResetKey,setExcludedSubtypes,setExcludedAnnotationValues]);
 
   // Filter genes based on marker genes per subtype setting
   const geneFilteredData = useMemo(() => {
@@ -185,7 +185,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
   }, [isNumericAnnotation, continuousColorScale, userAnnotationColors]);
 
   // Toggle subtype exclusion
-  const toggleSubtypeExclusion = useCallback((subtype: string) => {
+  const toggleSubtypeExclusion = (subtype: string) => {
     setExcludedSubtypes(prev => {
       const next = new Set(prev);
       if (next.has(subtype)) {
@@ -195,10 +195,10 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
       }
       return next;
     });
-  }, []);
+  };
 
   // Toggle annotation value exclusion
-  const toggleAnnotationExclusion = useCallback((value: string) => {
+  const toggleAnnotationExclusion = (value: string) => {
     setExcludedAnnotationValues(prev => {
       const next = new Set(prev);
       if (next.has(value)) {
@@ -208,7 +208,7 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
       }
       return next;
     });
-  }, []);
+  };
 
   // Filter samples based on exclusions
   const filteredData = useMemo(() => {
@@ -773,10 +773,10 @@ export const ExpressionHeatmap = forwardRef<ExpressionHeatmapRef, ExpressionHeat
     URL.revokeObjectURL(url);
   };
 
-  const handleResetFilters = useCallback(() => {
+  const handleResetFilters = () => {
     setExcludedSubtypes(new Set());
     setExcludedAnnotationValues(new Set());
-  }, []);
+  };
 
   const heatmapWidth = cellWidth * filteredData.samples.length;
 

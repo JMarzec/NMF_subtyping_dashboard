@@ -66,7 +66,7 @@ export const BackwardEliminationPanel = ({ result, onApplyFinal }: BackwardElimi
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row flex-wrap gap-3 items-center justify-between space-y-0 pb-2">
         <div className="flex items-center gap-3 flex-wrap">
           <CardTitle className="text-base">Backward Elimination</CardTitle>
           <TooltipProvider>
@@ -95,7 +95,7 @@ export const BackwardEliminationPanel = ({ result, onApplyFinal }: BackwardElimi
             </Badge>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {onApplyFinal && (
             <Button 
               variant="default" 

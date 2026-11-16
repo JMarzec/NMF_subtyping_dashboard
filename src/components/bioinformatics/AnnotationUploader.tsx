@@ -15,10 +15,12 @@ interface AnnotationUploaderProps {
   onAnnotationLoaded: (annotation: AnnotationData) => void;
   onRemove?: () => void;
   sampleIds?: string[]; // Optional: sample IDs from NMF data to validate against
+  value?:AnnotationData;
 }
 
-export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds, onRemove }: AnnotationUploaderProps) => {
-  const [annotationData, setAnnotationData] = useState<AnnotationData | null>(null);
+export const AnnotationUploader = ({ onAnnotationLoaded, sampleIds, onRemove,value }: AnnotationUploaderProps) => {
+  const [localData, setAnnotationData] = useState<AnnotationData | null>(null);
+  const annotationData=value??localData;
   const [error, setError] = useState<string>("");
   const [isDragging, setIsDragging] = useState(false);
 

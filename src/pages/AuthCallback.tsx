@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-
-function safeNext(raw: string | null): string {
-  if (!raw) return "/";
-  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
-  return raw;
-}
+import {oauthReturnPath} from "@/lib/oauthReturnPath";
 
 export default function AuthCallback() {
   const nav = useNavigate();
@@ -19,7 +14,7 @@ export default function AuthCallback() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = Date.now() + 10000;
     const stored = sessionStorage.getItem("post_auth_redirect");
-    const target = safeNext(params.get("next") ?? stored);
+    const target = oauthReturnPath(params.get("next") ?? stored);
 
     // Wait for session to be available before redirecting.
     const check = async () => {

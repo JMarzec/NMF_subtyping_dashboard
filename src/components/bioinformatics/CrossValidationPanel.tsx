@@ -59,7 +59,7 @@ export const CrossValidationPanel = ({ result, selectedCovariates }: CrossValida
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row flex-wrap gap-3 items-center justify-between space-y-0 pb-2">
         <div className="flex items-center gap-3 flex-wrap">
           <CardTitle className="text-base">Cross-Validation</CardTitle>
           <TooltipProvider>
@@ -92,7 +92,7 @@ export const CrossValidationPanel = ({ result, selectedCovariates }: CrossValida
             </Tooltip>
           </TooltipProvider>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => exportData('csv')}>
             <FileSpreadsheet className="h-4 w-4 mr-1" />
             CSV
@@ -122,7 +122,7 @@ export const CrossValidationPanel = ({ result, selectedCovariates }: CrossValida
                 </div>
               </div>
               <div className="p-3 bg-muted/50 rounded-md col-span-2">
-                <div className="text-xs text-muted-foreground">95% Confidence Interval</div>
+                <div className="text-xs text-muted-foreground">Approximate 95% fold interval</div>
                 <div className="text-lg font-bold text-foreground">
                   {result.ci95Lower.toFixed(3)} – {result.ci95Upper.toFixed(3)}
                 </div>

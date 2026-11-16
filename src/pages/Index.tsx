@@ -201,7 +201,8 @@ const Index = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <JsonUploader onDataLoaded={handleDataLoaded} />
           <AnnotationUploader key={filterResetKey}
-            onRemove={() => setUserAnnotations(undefined)}
+            value={userAnnotations}
+            onRemove={() => {setUserAnnotations(undefined);setFilterResetKey(k=>k+1);}}
             onAnnotationLoaded={handleAnnotationLoaded} 
             sampleIds={sampleIds}
           />
@@ -232,7 +233,7 @@ const Index = () => {
         </div>
 
         {/* Clustering Metrics - Below NMF Overview */}
-        <ClusteringMetrics samples={data.samples} />
+        <ClusteringMetrics samples={data.samples} annotations={userAnnotations?.annotations} />
 
         {/* UMAP Cluster - Full Width */}
         <div ref={clusterScatterRef}>
@@ -257,7 +258,7 @@ const Index = () => {
 
         {/* PCA Scree Plot - Full Width */}
         <div ref={pcaScreeRef}>
-          <PCAScreePlot heatmapData={heatmapData} samples={data.samples} />
+          <PCAScreePlot heatmapData={heatmapData} samples={data.samples} annotations={userAnnotations?.annotations} />
         </div>
 
         {/* Expression Heatmap - Full Width */}

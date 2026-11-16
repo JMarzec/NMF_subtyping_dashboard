@@ -74,7 +74,7 @@ export const MultivariateResultsTable = ({ result }: MultivariateResultsTablePro
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row flex-wrap gap-3 items-center justify-between space-y-0 pb-2">
         <div className="flex items-center gap-3 flex-wrap">
           <CardTitle className="text-base">Multivariate Cox Regression</CardTitle>
           <TooltipProvider>
@@ -148,7 +148,7 @@ export const MultivariateResultsTable = ({ result }: MultivariateResultsTablePro
             </Select>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => exportData('csv')}>
             <FileSpreadsheet className="h-4 w-4 mr-1" />
             CSV
@@ -159,7 +159,7 @@ export const MultivariateResultsTable = ({ result }: MultivariateResultsTablePro
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="min-w-0">
         <Table>
           <TableHeader>
             <TableRow>

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import reference from "./fixtures/cox-efron.json";
 import { completeCohort, fitCox, concordance, kaplanMeier, logRankObserved } from "./survivalEngine";
-import { resultFromFit, compareNestedModels, backwardElimination, crossValidateConcordance,observedGroupCox } from "./coxphAnalysis";
+import { resultFromFit, compareNestedModels, backwardElimination, crossValidateConcordance,observedGroupCox,stepwiseModelComparison } from "./coxphAnalysis";
 import type { SurvivalObservation } from "./analysisData";
 const outcomes = reference.outcomes as SurvivalObservation[];
 const data = reference.covariates;
@@ -10,6 +10,14 @@ describe("Observed survival inference",()=>{
     const fit=fitCox(outcomes,data,reference.stratifiedExpected.strata);
     fit.beta.forEach((b,i)=>expect(b/fit.columns[i].scale).toBeCloseTo(reference.stratifiedExpected.beta[i],6));
     expect(fit.logLikelihood).toBeCloseTo(reference.stratifiedExpected.logLikelihood,6);
+  });
+  test("model comparisons preserve the selected strata",()=>{
+    const comparisons=stepwiseModelComparison(outcomes,data,{},Object.keys(data),undefined,reference.stratifiedExpected.strata);
+    expect(comparisons.at(-1)?.fullModel.logLikelihood).toBeCloseTo(reference.stratifiedExpected.logLikelihood,6);
+  });
+  test("stratified concordance does not compare different baselines",()=>{
+    const rows:SurvivalObservation[]=[{sample_id:'a',time:1,event:1},{sample_id:'b',time:2,event:1},{sample_id:'c',time:3,event:1},{sample_id:'d',time:4,event:0}];
+    expect(concordance(rows,[2,1,100,99],{a:'one',b:'one',c:'two',d:'two'})).toBe(1);
   });
   test("numeric group labels remain a categorical factor",()=>{
     const numeric=Object.fromEntries(Object.entries(data.category).map(([id,c])=>[id,{A:'1',B:'2',C:'3'}[c]]));
@@ -56,6 +64,11 @@ describe("Observed survival inference",()=>{
     const groups=Object.fromEntries(rows.map((o,i)=>[o.sample_id,['A','B','C'][i%3]]));
     const a=logRankObserved(rows,groups),b=logRankObserved([...rows].reverse(),Object.fromEntries(Object.entries(groups).map(([id,g])=>[id,{A:'C',B:'A',C:'B'}[g]])));
     expect(a?.degreesOfFreedom).toBe(2);expect(a?.chiSquare).toBeCloseTo(b?.chiSquare??-1,10);
+  });
+  test("stratified log-rank pools scores and covariance within strata",()=>{
+    const rows:SurvivalObservation[]=[{sample_id:'a',time:1,event:1},{sample_id:'b',time:2,event:1},{sample_id:'c',time:1,event:1},{sample_id:'d',time:3,event:1}];
+    const result=logRankObserved(rows,{a:'A',b:'B',c:'A',d:'B'},{a:'one',b:'one',c:'two',d:'two'});
+    expect(result?.chiSquare).toBeCloseTo(2,12);expect(result?.degreesOfFreedom).toBe(1);
   });
   test("backward elimination may remove the final nonsignificant term",()=>{
     const rows:SurvivalObservation[]=Array.from({length:40},(_,i)=>({sample_id:`r${i}`,time:Math.floor(i/2)+1,event:1}));

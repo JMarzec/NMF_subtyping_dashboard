@@ -21,6 +21,12 @@ test("quoted CSV and duplicate sample validation",()=>{
   expect(()=>buildAnnotations(p.headers,[p.rows[0],p.rows[0]],['a'])).toThrow();
   expect(()=>parseDelimitedFile('a,a\n1,2')).toThrow();
 });
+test("reject inconsistent confidence intervals and unknown markers",()=>{
+  const d=normalizeAnalysis(example);
+  expect(()=>normalizeAnalysis({...d,markerGenes:[{gene:'unknown',subtype:'absent',weight:1}]})).toThrow();
+  expect(()=>normalizeAnalysis({...d,survivalData:[{subtype:'Subtype_1',timePoints:[{time:1,survival:.5,lowerCI:.7,upperCI:.8}]}]})).toThrow();
+  expect(()=>normalizeAnalysis({...d,coxPHResults:{referenceGroup:'a',groups:[{subtype:'b',hazardRatio:2,lowerCI:3,upperCI:4,pValue:.1}],waldTest:{chiSquare:1,df:1,pValue:.1}}})).toThrow();
+});
 test("large matrix extent avoids argument spreading",()=>{
   expect(matrixExtent(Array.from({length:200},()=>Array.from({length:1000},(_,i)=>i-500)))).toEqual({min:-500,max:499});
 });

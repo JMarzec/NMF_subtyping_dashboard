@@ -152,7 +152,7 @@ export function resultFromFit(fit: CoxFit): MultivariateCoxPHResult {
   });
   const sorted=[...covariates].sort((a,b)=>a.pValue-b.pValue);let previous=1;
   for(let i=sorted.length-1;i>=0;i--){previous=Math.min(previous,sorted[i].pValue*sorted.length/(i+1));sorted[i].pValueFDR=previous;}
-  return {covariates,waldTest:{chiSquare:fit.wald,df:fit.columns.length,pValue:chiSquareTail(fit.wald,fit.columns.length)},logLikelihood:fit.logLikelihood,concordance:concordance(fit.outcomes,fit.x.map(x=>dot(x,fit.beta))),fit,termNames:[...new Set(fit.columns.map(c=>c.term))]};
+  return {covariates,waldTest:{chiSquare:fit.wald,df:fit.columns.length,pValue:chiSquareTail(fit.wald,fit.columns.length)},logLikelihood:fit.logLikelihood,concordance:concordance(fit.outcomes,fit.x.map(x=>dot(x,fit.beta)),Object.fromEntries(fit.outcomes.map((o,i)=>[o.sample_id,fit.strata[i]]))),fit,termNames:[...new Set(fit.columns.map(c=>c.term))]};
 }
 export function multivariateCoxPH(outcomes: SurvivalObservation[], data: CovariateData, _groups?: Record<string,string>, _counts?: Record<string,number>, strata?: Record<string,string>): MultivariateCoxPHResult | null {
   try{return resultFromFit(fitCox(completeCohort(outcomes,data),data,strata));}catch{return null;}
@@ -172,17 +172,17 @@ export function compareNestedModels(reduced: MultivariateCoxPHResult|null, full:
 }
 const subset=(data:CovariateData,names:string[])=>Object.fromEntries(names.map(n=>[n,data[n]]));
 const aic=(m:MultivariateCoxPHResult)=>-2*(m.logLikelihood??0)+2*m.covariates.length;
-function context(outcomes:SurvivalObservation[],data:CovariateData,names:string[]) {
-  const cohort=completeCohort(outcomes,data,names);
-  return (terms:string[])=>multivariateCoxPH(cohort,subset(data,terms));
+function context(outcomes:SurvivalObservation[],data:CovariateData,names:string[],strata?:Record<string,string>) {
+  const cohort=completeCohort(outcomes,data,names).filter(o=>!strata||Boolean(strata[o.sample_id]));
+  return (terms:string[])=>multivariateCoxPH(cohort,subset(data,terms),undefined,undefined,strata);
 }
-export function stepwiseModelComparison(outcomes:SurvivalObservation[],data:CovariateData,_groups:Record<string,string>,names:string[],_counts?:Record<string,number>):ModelComparisonResult[]{
-  const fit=context(outcomes,data,names),results:ModelComparisonResult[]=[];let previous=fit([]);
+export function stepwiseModelComparison(outcomes:SurvivalObservation[],data:CovariateData,_groups:Record<string,string>,names:string[],_counts?:Record<string,number>,strata?:Record<string,string>):ModelComparisonResult[]{
+  const fit=context(outcomes,data,names,strata),results:ModelComparisonResult[]=[];let previous=fit([]);
   for(let i=1;i<=names.length;i++){const model=fit(names.slice(0,i)),comparison=compareNestedModels(previous,model);if(!model)break;if(comparison)results.push(comparison);previous=model;}
   return results;
 }
-export function backwardElimination(outcomes:SurvivalObservation[],data:CovariateData,_groups:Record<string,string>,names:string[],_counts?:Record<string,number>,threshold=0.05):BackwardEliminationResult{
-  const fit=context(outcomes,data,names),steps:BackwardEliminationResult['steps']=[],removedCovariates:string[]=[];let selected=[...names],model=fit(selected);
+export function backwardElimination(outcomes:SurvivalObservation[],data:CovariateData,_groups:Record<string,string>,names:string[],_counts?:Record<string,number>,threshold=0.05,strata?:Record<string,string>):BackwardEliminationResult{
+  const fit=context(outcomes,data,names,strata),steps:BackwardEliminationResult['steps']=[],removedCovariates:string[]=[];let selected=[...names],model=fit(selected);
   if(!model)return {steps,finalCovariates:[],significantCovariates:[],removedCovariates:[],threshold};
   steps.push({step:0,removedCovariate:null,removedPValue:null,remainingCovariates:[...selected],modelAIC:aic(model),waldPValue:model.waldTest.pValue});
   while(selected.length){
@@ -193,8 +193,8 @@ export function backwardElimination(outcomes:SurvivalObservation[],data:Covariat
   }
   return {steps,finalCovariates:selected,significantCovariates:selected,removedCovariates,threshold};
 }
-export function forwardSelection(outcomes:SurvivalObservation[],data:CovariateData,_groups:Record<string,string>,names:string[],_counts?:Record<string,number>,threshold=0.05):ForwardSelectionResult{
-  const fit=context(outcomes,data,names),steps:ForwardSelectionResult['steps']=[];let selected:string[]=[],model=fit([]);
+export function forwardSelection(outcomes:SurvivalObservation[],data:CovariateData,_groups:Record<string,string>,names:string[],_counts?:Record<string,number>,threshold=0.05,strata?:Record<string,string>):ForwardSelectionResult{
+  const fit=context(outcomes,data,names,strata),steps:ForwardSelectionResult['steps']=[];let selected:string[]=[],model=fit([]);
   if(!model)return {steps,finalCovariates:[],rejectedCovariates:names,threshold};
   steps.push({step:0,addedCovariate:null,addedPValue:null,selectedCovariates:[],modelAIC:aic(model),waldPValue:1});
   while(selected.length<names.length){
@@ -206,8 +206,8 @@ export function forwardSelection(outcomes:SurvivalObservation[],data:CovariateDa
   return {steps,finalCovariates:selected,rejectedCovariates:names.filter(n=>!selected.includes(n)),threshold};
 }
 export interface StepwiseSelectionResult { removalThreshold?: number }
-export function stepwiseSelection(outcomes:SurvivalObservation[],data:CovariateData,_groups:Record<string,string>,names:string[],_counts?:Record<string,number>,entryThreshold=0.05,removalThreshold=0.10):StepwiseSelectionResult{
-  const fit=context(outcomes,data,names),steps:StepwiseSelectionResult['steps']=[],addedCovariates:string[]=[],removedCovariates:string[]=[],visited=new Set<string>();let selected:string[]=[],model=fit([]);
+export function stepwiseSelection(outcomes:SurvivalObservation[],data:CovariateData,_groups:Record<string,string>,names:string[],_counts?:Record<string,number>,entryThreshold=0.05,removalThreshold=0.10,strata?:Record<string,string>):StepwiseSelectionResult{
+  const fit=context(outcomes,data,names,strata),steps:StepwiseSelectionResult['steps']=[],addedCovariates:string[]=[],removedCovariates:string[]=[],visited=new Set<string>();let selected:string[]=[],model=fit([]);
   for(let iteration=0;iteration<names.length*5 && model;iteration++){
     const key=[...selected].sort().join('\0');if(visited.has(key))break;visited.add(key);
     const best=names.filter(n=>!selected.includes(n)).map(term=>{const full=fit([...selected,term]);return {term,full,p:compareNestedModels(model,full)?.likelihoodRatioTest.pValue??1};}).sort((a,b)=>a.p-b.p)[0];
@@ -223,8 +223,8 @@ export function stepwiseSelection(outcomes:SurvivalObservation[],data:CovariateD
   }
   return {steps,finalCovariates:selected,addedCovariates,removedCovariates,threshold:entryThreshold,removalThreshold,finalConcordance:model?.concordance};
 }
-export function crossValidateConcordance(outcomes:SurvivalObservation[],data:CovariateData,groups:Record<string,string>,names:string[],_counts?:Record<string,number>,folds=5):CrossValidationResult{
-  const cohort=completeCohort(outcomes,data,names),scores:number[]=[];
+export function crossValidateConcordance(outcomes:SurvivalObservation[],data:CovariateData,groups:Record<string,string>,names:string[],_counts?:Record<string,number>,folds=5,strata?:Record<string,string>):CrossValidationResult{
+  const cohort=completeCohort(outcomes,data,names).filter(o=>!strata||Boolean(strata[o.sample_id])),scores:number[]=[];
   const empty={folds,concordanceScores:[],meanConcordance:NaN,stdConcordance:NaN,ci95Lower:NaN,ci95Upper:NaN};
   if(folds<2||cohort.length<folds*5)return empty;
   const ordered=[...cohort].sort((a,b)=>a.event-b.event||a.sample_id.localeCompare(b.sample_id));
@@ -232,11 +232,13 @@ export function crossValidateConcordance(outcomes:SurvivalObservation[],data:Cov
     const train=ordered.filter((_,i)=>i%folds!==fold),test=ordered.filter((_,i)=>i%folds===fold);
     try{
       // Repeat selection entirely within the training fold, avoiding selection leakage.
-      const chosen=stepwiseSelection(train,subset(data,names),groups,names).finalCovariates;
-      const model=fitCox(train,subset(data,chosen));
+      const chosen=stepwiseSelection(train,subset(data,names),groups,names,undefined,0.05,0.10,strata).finalCovariates;
+      const model=fitCox(train,subset(data,chosen),strata);
       const trainingLevels=new Map(chosen.map(term=>[term,new Set(train.map(o=>String(data[term][o.sample_id])))]));
       if(test.some(o=>model.columns.some(c=>c.level!==undefined&&!trainingLevels.get(c.term)?.has(String(data[c.term][o.sample_id])))))return empty;
-      const x=encode(test,data,model.columns).x,c=concordance(test,x.map(row=>dot(row,model.beta)));
+      const x=encode(test,data,model.columns).x,risks=x.map(row=>dot(row,model.beta));
+      // Baseline hazards differ between strata: only compare within a stratum.
+      const c=concordance(test,risks,strata);
       if(c===undefined)return empty;scores.push(c);
     }catch{return empty;}
   }

@@ -102,6 +102,7 @@ export const SurvivalCurve = ({
   const [stratifyBy, setStratifyBy] = useState<string>("none");
   const [selectedCovariates, setSelectedCovariates] = useState<string[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
+  const eligibleOutcomes=useMemo(()=>rawSurvivalData.filter(o=>stratifyBy==="none"||userAnnotations?.annotations[o.sample_id]?.[stratifyBy]),[rawSurvivalData,stratifyBy,userAnnotations]);
 
   const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "survival-curve");
@@ -125,10 +126,10 @@ export const SurvivalCurve = ({
   },[groupBy,sampleSubtypes,userAnnotations]);
   const { effectiveData, effectiveColors, effectiveCounts, isAnnotationGrouping } = useMemo(() => {
     const isAnnotationGrouping=groupBy!=="nmf_subtype";
-    const curves=isAnnotationGrouping || !data.length ? kaplanMeier(rawSurvivalData,groupAssignments) : data;
+    const curves=isAnnotationGrouping || !data.length || stratifyBy!=="none" ? kaplanMeier(eligibleOutcomes,groupAssignments) : data;
     const counts=isAnnotationGrouping?Object.fromEntries(curves.map(g=>[g.subtype,g.nTotal ?? 0])):subtypeCounts;
     return {effectiveData:curves,effectiveColors:isAnnotationGrouping?generateAnnotationColors(curves.map(g=>g.subtype)):subtypeColors,effectiveCounts:counts,isAnnotationGrouping};
-  },[data,rawSurvivalData,groupAssignments,groupBy,subtypeCounts,subtypeColors]);
+  },[data,eligibleOutcomes,stratifyBy,groupAssignments,groupBy,subtypeCounts,subtypeColors]);
   const strata=useMemo(()=>stratifyBy === "none" ? undefined : Object.fromEntries(Object.entries(userAnnotations?.annotations ?? {}).flatMap(([id,cols])=>cols[stratifyBy]?[[id,cols[stratifyBy]]]:[])),[stratifyBy,userAnnotations]);
   const isPrecomputedPValue=survivalPValue!==undefined && !isAnnotationGrouping && stratifyBy==="none";
   const isPrecomputedCoxPH=!!coxPHResults && !isAnnotationGrouping && stratifyBy==="none";
@@ -158,8 +159,8 @@ export const SurvivalCurve = ({
       });
     });
 
-    return multivariateCoxPH(rawSurvivalData, covariateData, sampleSubtypes, subtypeCounts);
-  }, [selectedCovariates, userAnnotations, sampleSubtypes, rawSurvivalData, subtypeCounts]);
+    return multivariateCoxPH(eligibleOutcomes, covariateData, sampleSubtypes, subtypeCounts,strata);
+  }, [selectedCovariates, userAnnotations, sampleSubtypes, eligibleOutcomes, subtypeCounts,strata]);
 
   // Stepwise model comparison using likelihood ratio tests
   const modelComparisons = useMemo((): ModelComparisonResult[] => {
@@ -179,8 +180,8 @@ export const SurvivalCurve = ({
       });
     });
 
-    return stepwiseModelComparison(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts);
-  }, [selectedCovariates, userAnnotations, sampleSubtypes, rawSurvivalData, subtypeCounts]);
+    return stepwiseModelComparison(eligibleOutcomes, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts,strata);
+  }, [selectedCovariates, userAnnotations, sampleSubtypes, eligibleOutcomes, subtypeCounts,strata]);
 
   // Backward elimination result
   const [backwardEliminationResult, setBackwardEliminationResult] = useState<BackwardEliminationResult | null>(null);
@@ -211,7 +212,7 @@ export const SurvivalCurve = ({
       });
     });
 
-    const result = backwardElimination(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 0.05);
+    const result = backwardElimination(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 0.05,strata);
     if(!result.steps.length) { toast.error("Model unavailable: check events, missing values and redundant predictors"); return; }
     setBackwardEliminationResult(result);
     setForwardSelectionResult(null);
@@ -235,7 +236,7 @@ export const SurvivalCurve = ({
       });
     });
 
-    const result = forwardSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05);
+    const result = forwardSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05,strata);
     if(!result.steps.length) { toast.error("Model unavailable: check individual outcomes and predictors"); return; }
     setForwardSelectionResult(result);
     setBackwardEliminationResult(null);
@@ -259,7 +260,8 @@ export const SurvivalCurve = ({
       });
     });
 
-    const result = stepwiseSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05, 0.10);
+    const result = stepwiseSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05, 0.10,strata);
+    if(!result.steps.length){toast.info("No covariates entered the stepwise model; check individual outcomes and predictors");}
     setStepwiseSelectionResult(result);
     setForwardSelectionResult(null);
     setBackwardEliminationResult(null);
@@ -282,7 +284,7 @@ export const SurvivalCurve = ({
       });
     });
 
-    const result = crossValidateConcordance(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 5);
+    const result = crossValidateConcordance(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 5,strata);
     if(!result.concordanceScores.length)toast.error("Cross-validation unavailable: insufficient comparable outcomes or a fold could not be fitted");
     setCrossValidationResult(result);
   };
@@ -456,7 +458,7 @@ export const SurvivalCurve = ({
     // Process each subtype - ensure monotonic decreasing survival
     const processedData = effectiveData.map(group => {
       const subtype = group.subtype;
-      const n = group.nTotal || effectiveCounts?.[subtype] || 100;
+      const n = group.nTotal ?? effectiveCounts?.[subtype];
       
       // Add initial point at time 0 with survival 1 if not present
       const points = [...group.timePoints];
@@ -600,7 +602,7 @@ export const SurvivalCurve = ({
       const row: Record<string, number | string> = { time: t };
       processedData.forEach(group => {
         if(rawSurvivalData.length) {
-          row[group.subtype]=rawSurvivalData.filter(o=>groupAssignments[o.sample_id]===group.subtype && o.time>=t).length;
+          row[group.subtype]=eligibleOutcomes.filter(o=>groupAssignments[o.sample_id]===group.subtype && o.time>=t).length;
         } else {
           const next=group.points.find(p=>p.time>=t);
           if(next?.atRisk!==undefined)row[group.subtype]=next.atRisk;
@@ -617,7 +619,7 @@ export const SurvivalCurve = ({
       maxTime: maxT,
       riskTableData: riskTable
     };
-  }, [effectiveData, effectiveCounts, rawSurvivalData, groupAssignments]);
+  }, [effectiveData, effectiveCounts, rawSurvivalData, groupAssignments,eligibleOutcomes]);
 
   if (effectiveData.length === 0) {
     return (
@@ -645,7 +647,7 @@ export const SurvivalCurve = ({
             {rawSurvivalData.length > 0 && annotationColumns.length > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Group by:</span>
-                <Select value={groupBy} onValueChange={(v) => { setGroupBy(v); if (v !== "nmf_subtype") setStratifyBy("none"); }}>
+                <Select value={groupBy} onValueChange={(v) => { setGroupBy(v); if (v !== "nmf_subtype") setStratifyBy("none"); clearAllCovariates(); }}>
                   <SelectTrigger className="w-[150px] h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
@@ -663,7 +665,7 @@ export const SurvivalCurve = ({
             {rawSurvivalData.length > 0 && annotationColumns.length > 0 && groupBy === "nmf_subtype" && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Stratify by:</span>
-                <Select value={stratifyBy} onValueChange={setStratifyBy}>
+                <Select value={stratifyBy} onValueChange={(v)=>{setStratifyBy(v);setBackwardEliminationResult(null);setForwardSelectionResult(null);setStepwiseSelectionResult(null);setCrossValidationResult(null);}}>
                   <SelectTrigger className="w-[150px] h-8 text-xs">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
@@ -1149,7 +1151,7 @@ export const SurvivalCurve = ({
         </div>
         
         {/* Data source legend */}
-        <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground">
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <Database className="h-3 w-3" />
             <span>= Pre-computed (R)</span>

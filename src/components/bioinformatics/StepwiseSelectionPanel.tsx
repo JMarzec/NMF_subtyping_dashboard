@@ -70,7 +70,7 @@ export const StepwiseSelectionPanel = ({ result, onApplyFinal }: StepwiseSelecti
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row flex-wrap gap-3 items-center justify-between space-y-0 pb-2">
         <div className="flex items-center gap-3 flex-wrap">
           <CardTitle className="text-base">Stepwise Selection</CardTitle>
           <TooltipProvider>
@@ -126,7 +126,7 @@ export const StepwiseSelectionPanel = ({ result, onApplyFinal }: StepwiseSelecti
             </TooltipProvider>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {onApplyFinal && (
             <Button 
               variant="default" 

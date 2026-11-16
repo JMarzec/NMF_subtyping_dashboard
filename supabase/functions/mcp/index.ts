@@ -35,6 +35,7 @@ import { createClient } from "npm:@supabase/supabase-js@^2.90.1";
 function supabaseForUser(ctx) {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY;
+  if (!url || !key || !ctx.getToken()) throw new Error("Authenticated data access is not configured");
   return createClient(url, key, {
     global: { headers: { Authorization: `Bearer ${ctx.getToken()}` } },
     auth: { persistSession: false, autoRefreshToken: false }
@@ -100,17 +101,103 @@ var get_analysis_summary_default = defineTool3({
 
 // src/lib/mcp/tools/get-marker-genes.ts
 import { defineTool as defineTool4 } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as z4 } from "npm:zod@^3.25.76";
+
+// src/lib/analysisData.ts
 import { z as z3 } from "npm:zod@^3.25.76";
+var finite = z3.number().finite();
+var nonnegative = finite.nonnegative();
+var probability = finite.min(0).max(1);
+var text = z3.string().min(1);
+var sampleSchema = z3.object({ sample_id: text, subtype: text }).catchall(z3.union([z3.string(), finite, z3.boolean(), z3.null()]));
+var markerSchema = z3.object({ gene: text, subtype: text, weight: finite }).passthrough();
+var pointSchema = z3.object({ time: nonnegative, survival: probability, atRisk: nonnegative.optional(), events: nonnegative.optional(), censored: nonnegative.optional(), stdErr: nonnegative.optional(), lowerCI: probability.optional(), upperCI: probability.optional() }).passthrough();
+var outcomeSchema = z3.object({ sample_id: text, subtype: text.optional(), time: nonnegative, event: z3.union([z3.literal(0), z3.literal(1)]) }).passthrough();
+var schema = z3.object({
+  summary: z3.object({ dataset: text, n_samples: z3.number().int().positive(), n_genes: z3.number().int().nonnegative(), n_subtypes: z3.number().int().positive(), subtype_counts: z3.record(z3.number().int().nonnegative()), cophenetic_correlation: probability, silhouette_mean: finite.min(-1).max(1), optimal_rank: z3.number().int().positive().optional() }).passthrough(),
+  samples: z3.array(sampleSchema).min(1),
+  markerGenes: z3.array(markerSchema),
+  heatmapData: z3.object({ genes: z3.array(text), samples: z3.array(text), sampleSubtypes: z3.array(text), values: z3.array(z3.array(finite)) }).optional(),
+  rankMetrics: z3.array(z3.object({ rank: z3.number().int().positive(), cophenetic: probability, silhouette: finite.min(-1).max(1) })).optional(),
+  survivalData: z3.array(z3.object({ subtype: text, nTotal: nonnegative.optional(), nEvents: nonnegative.optional(), nCensored: nonnegative.optional(), timePoints: z3.array(pointSchema).min(1) })).optional(),
+  rawSurvivalData: z3.array(outcomeSchema).optional(),
+  survival_pvalue: probability.optional(),
+  coxPHResults: z3.object({ referenceGroup: text, groups: z3.array(z3.object({ subtype: text, hazardRatio: finite.positive(), lowerCI: finite.positive(), upperCI: finite.positive(), pValue: probability })), waldTest: z3.object({ chiSquare: nonnegative, df: z3.number().int().nonnegative(), pValue: probability }) }).optional(),
+  annotations: z3.object({ sampleColumn: text, columns: z3.array(text), annotations: z3.record(z3.record(z3.string())) }).optional()
+}).passthrough();
+var object = (value) => value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+var unique = (values, label) => {
+  if (new Set(values).size !== values.length) throw new Error(`Duplicate ${label}`);
+};
+function normalizeAnalysis(value) {
+  const raw = object(value);
+  const markers = raw.markerGenes ?? raw.marker_genes;
+  const outcomes = raw.rawSurvivalData ?? raw.raw_survival_data;
+  const data = schema.parse({
+    ...raw,
+    samples: raw.samples ?? raw.sampleResults ?? raw.sample_results,
+    markerGenes: Array.isArray(markers) ? markers.map((m) => {
+      const g = object(m);
+      return { ...g, weight: g.weight ?? g.score ?? g.log_fold_change };
+    }) : markers,
+    heatmapData: raw.heatmapData ?? raw.heatmap_data,
+    rankMetrics: raw.rankMetrics ?? raw.rank_metrics,
+    survivalData: raw.survivalData ?? raw.survival_data,
+    coxPHResults: raw.coxPHResults ?? raw.cox_ph_results,
+    rawSurvivalData: Array.isArray(outcomes) ? outcomes.map((o) => {
+      const r = object(o);
+      return { ...r, sample_id: r.sample_id ?? r.sampleId, event: r.event === true ? 1 : r.event === false ? 0 : r.event };
+    }) : outcomes
+  });
+  const ids = data.samples.map((s) => s.sample_id);
+  const sampleMap = new Map(data.samples.map((s) => [s.sample_id, s.subtype]));
+  unique(ids, "sample IDs");
+  const counts = {};
+  data.samples.forEach((s) => {
+    counts[s.subtype] = (counts[s.subtype] ?? 0) + 1;
+  });
+  if (data.summary.n_samples !== ids.length || data.summary.n_subtypes !== Object.keys(counts).length || Object.keys(data.summary.subtype_counts).length !== Object.keys(counts).length || Object.entries(counts).some(([s, n]) => data.summary.subtype_counts[s] !== n)) throw new Error("Summary counts do not match the samples");
+  if (data.heatmapData) {
+    const h = data.heatmapData;
+    unique(h.samples, "heatmap sample IDs");
+    unique(h.genes, "heatmap gene names");
+    if (h.values.length !== h.genes.length || h.sampleSubtypes.length !== h.samples.length || h.values.some((row) => row.length !== h.samples.length)) throw new Error("Heatmap dimensions do not match labels");
+    if (h.samples.some((id, i) => sampleMap.get(id) !== h.sampleSubtypes[i])) throw new Error("Heatmap samples do not match the analysis");
+  }
+  data.survivalData?.forEach((group) => {
+    let previousTime = -1, previousSurvival = 1;
+    group.timePoints.forEach((p) => {
+      if (p.time <= previousTime || p.survival > previousSurvival) throw new Error("Survival curves must have increasing times and nonincreasing survival");
+      if (p.lowerCI !== void 0 && p.lowerCI > p.survival || p.upperCI !== void 0 && p.upperCI < p.survival) throw new Error("Survival confidence bounds must contain survival");
+      previousTime = p.time;
+      previousSurvival = p.survival;
+    });
+  });
+  unique(data.survivalData?.map((g) => g.subtype) ?? [], "survival groups");
+  unique(data.markerGenes.map((g) => JSON.stringify([g.subtype, g.gene])), "marker genes within subtype");
+  if (data.markerGenes.some((g) => !Object.prototype.hasOwnProperty.call(counts, g.subtype))) throw new Error("Marker genes contain unknown subtypes");
+  if (data.annotations && Object.keys(data.annotations.annotations).some((id) => !sampleMap.has(id))) throw new Error("Annotations contain unknown samples");
+  data.coxPHResults?.groups.forEach((g) => {
+    if (g.lowerCI > g.hazardRatio || g.upperCI < g.hazardRatio) throw new Error("Cox confidence bounds must contain the hazard ratio");
+  });
+  if (data.rawSurvivalData) {
+    unique(data.rawSurvivalData.map((o) => o.sample_id), "survival sample IDs");
+    if (data.rawSurvivalData.some((o) => !ids.includes(o.sample_id))) throw new Error("Survival outcomes contain unknown samples");
+  }
+  return data;
+}
+
+// src/lib/mcp/tools/get-marker-genes.ts
 var get_marker_genes_default = defineTool4({
   name: "get_marker_genes",
   title: "Get marker genes",
   description: "Return top marker genes per subtype for one saved analysis. topN defaults to 25 per subtype.",
   inputSchema: {
-    analysisId: z3.string(),
-    offset: z3.number().int().nonnegative().optional(),
-    pageSize: z3.number().int().min(1).max(500).optional(),
-    topN: z3.number().int().min(1).max(100).optional().describe("Genes per subtype (default 25)."),
-    subtype: z3.string().optional().describe("Filter to a single subtype.")
+    analysisId: z4.string(),
+    offset: z4.number().int().nonnegative().optional(),
+    pageSize: z4.number().int().min(1).max(500).optional(),
+    topN: z4.number().int().min(1).max(100).optional().describe("Genes per subtype (default 25)."),
+    subtype: z4.string().optional().describe("Filter to a single subtype.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ analysisId, topN, subtype, offset = 0, pageSize = 100 }, ctx) => {
@@ -121,7 +208,12 @@ var get_marker_genes_default = defineTool4({
     const { data: analysis, error } = await sb.from("analyses").select("document").eq("id", analysisId).maybeSingle();
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     if (!analysis?.document) return { content: [{ type: "text", text: "Analysis unavailable; re-import legacy data" }], isError: true };
-    const document = analysis.document;
+    let document;
+    try {
+      document = normalizeAnalysis(analysis.document);
+    } catch {
+      return { content: [{ type: "text", text: "Saved analysis is invalid; re-import the original JSON" }], isError: true };
+    }
     const groups = /* @__PURE__ */ new Map();
     for (const marker of document.markerGenes ?? []) {
       if (subtype && marker.subtype !== subtype) continue;
@@ -130,7 +222,7 @@ var get_marker_genes_default = defineTool4({
       groups.set(marker.subtype, entries);
     }
     const all = [...groups.keys()].sort().flatMap((s) => (groups.get(s) ?? []).sort((a, b) => b.weight - a.weight).slice(0, limit));
-    const trimmed = all.slice(offset, offset + pageSize);
+    const trimmed = all.slice(offset, offset + pageSize).map(({ gene, subtype: subtype2, weight }) => ({ gene, subtype: subtype2, weight }));
     return {
       content: [{ type: "text", text: JSON.stringify(trimmed, null, 2) }],
       structuredContent: { markerGenes: trimmed, nextOffset: offset + pageSize < all.length ? offset + pageSize : null }
@@ -140,23 +232,219 @@ var get_marker_genes_default = defineTool4({
 
 // src/lib/mcp/tools/get-survival-stats.ts
 import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.23.0";
-import { z as z4 } from "npm:zod@^3.25.76";
+import { z as z5 } from "npm:zod@^3.25.76";
+
+// src/lib/survivalEngine.ts
+import { Matrix as Matrix2, SingularValueDecomposition } from "npm:ml-matrix@^6.15.0";
+
+// src/lib/numerics.ts
+import stats from "npm:jstat@^1.9.6";
+import { Matrix, inverse } from "npm:ml-matrix@^6.15.0";
+var chiSquareTail = (x, df) => df > 0 ? Math.max(0, Math.min(1, 1 - stats.jStat.chisquare.cdf(x, df))) : 1;
+function invert(matrix) {
+  if (!matrix.length) return [];
+  const result = inverse(new Matrix(matrix)).to2DArray();
+  if (result.some((row) => row.some((v) => !Number.isFinite(v)))) throw new Error("Singular information matrix");
+  return result;
+}
+var dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+var multiply = (a, b) => a.map((row) => dot(row, b));
+
+// src/lib/survivalEngine.ts
+var numeric = (v) => v !== "" && Number.isFinite(Number(v));
+function completeCohort(outcomes, data, names = Object.keys(data)) {
+  return outcomes.filter((o) => names.every((n) => data[n]?.[o.sample_id] !== void 0 && data[n][o.sample_id] !== ""));
+}
+function encode(outcomes, data, learned) {
+  const columns = learned ?? Object.keys(data).flatMap((term) => {
+    const values = outcomes.map((o) => data[term][o.sample_id]);
+    if (values.every(numeric)) {
+      const nums = values.map(Number), mean = nums.reduce((a, b) => a + b, 0) / nums.length;
+      const scale = Math.sqrt(nums.reduce((s, v) => s + (v - mean) ** 2, 0) / nums.length);
+      if (scale < 1e-12) throw new Error(`Constant predictor: ${term}`);
+      return [{ name: term, term, mean, scale }];
+    }
+    const levels = [...new Set(values.map(String))].sort();
+    if (levels.length < 2) throw new Error(`Constant predictor: ${term}`);
+    return levels.slice(1).map((level) => ({ name: `${term}: ${level} (vs ${levels[0]})`, term, level, mean: 0, scale: 1 }));
+  });
+  const x = outcomes.map((o) => columns.map((c) => c.level === void 0 ? (Number(data[c.term]?.[o.sample_id]) - c.mean) / c.scale : Number(String(data[c.term]?.[o.sample_id]) === c.level)));
+  if (x.some((r) => r.some((v) => !Number.isFinite(v)))) throw new Error("Incomplete predictors");
+  return { columns, x };
+}
+function evaluateCox(beta, x, outcomes, strata) {
+  const p = beta.length, score = Array(p).fill(0), information = Array.from({ length: p }, () => Array(p).fill(0));
+  let logLikelihood = 0;
+  const eta = x.map((r) => dot(r, beta));
+  for (const stratum of new Set(strata)) {
+    const members = outcomes.map((_, i) => i).filter((i) => strata[i] === stratum);
+    const times = [...new Set(members.filter((i) => outcomes[i].event === 1).map((i) => outcomes[i].time))].sort((a, b) => a - b);
+    for (const time of times) {
+      const risk = members.filter((i) => outcomes[i].time >= time), deaths = members.filter((i) => outcomes[i].time === time && outcomes[i].event === 1);
+      const shift = risk.reduce((m, i) => Math.max(m, eta[i]), -Infinity);
+      const moments = (ids) => {
+        let s0 = 0;
+        const s1 = Array(p).fill(0), s2 = Array.from({ length: p }, () => Array(p).fill(0));
+        for (const i of ids) {
+          const w = Math.exp(eta[i] - shift);
+          s0 += w;
+          for (let j = 0; j < p; j++) {
+            s1[j] += w * x[i][j];
+            for (let k = 0; k < p; k++) s2[j][k] += w * x[i][j] * x[i][k];
+          }
+        }
+        return { s0, s1, s2 };
+      };
+      const r = moments(risk), d = moments(deaths);
+      deaths.forEach((i) => {
+        logLikelihood += eta[i];
+        for (let j = 0; j < p; j++) score[j] += x[i][j];
+      });
+      for (let l = 0; l < deaths.length; l++) {
+        const f = l / deaths.length, den = r.s0 - f * d.s0;
+        logLikelihood -= Math.log(den) + shift;
+        const first = r.s1.map((v, j) => (v - f * d.s1[j]) / den);
+        for (let j = 0; j < p; j++) {
+          score[j] -= first[j];
+          for (let k = 0; k < p; k++) information[j][k] += (r.s2[j][k] - f * d.s2[j][k]) / den - first[j] * first[k];
+        }
+      }
+    }
+  }
+  return { logLikelihood, score, information };
+}
+function fitCox(outcomes, data, strataMap = {}) {
+  if (outcomes.length < 2 || !outcomes.some((o) => o.event === 1)) throw new Error("No observed events");
+  if (new Set(outcomes.map((o) => o.sample_id)).size !== outcomes.length || outcomes.some((o) => !Number.isFinite(o.time) || o.time < 0 || o.event !== 0 && o.event !== 1)) throw new Error("Invalid individual survival outcomes");
+  const { columns, x } = encode(outcomes, data), p = columns.length;
+  const strata = outcomes.map((o) => strataMap[o.sample_id] ?? "all");
+  if (p) {
+    const centered = x.map((row) => row.map((v, j) => v - x.reduce((s, r) => s + r[j], 0) / x.length));
+    const singular = new SingularValueDecomposition(new Matrix2(centered), { autoTranspose: true }).diagonal;
+    if (singular.length < p || singular.some((v) => v < Math.max(...singular) * 1e-10)) throw new Error("Redundant or collinear predictors");
+  }
+  let beta = Array(p).fill(0), current = evaluateCox(beta, x, outcomes, strata);
+  const nullLogLikelihood = current.logLikelihood;
+  let converged = p === 0;
+  for (let iter = 0; iter < 60 && p; iter++) {
+    if (Math.max(...current.score.map(Math.abs)) < 1e-7) {
+      converged = true;
+      break;
+    }
+    const delta = multiply(invert(current.information), current.score);
+    let step = 1, accepted = false;
+    for (let trial = 0; trial < 24; trial++) {
+      const nextBeta = beta.map((v, j) => v + step * delta[j]), next = evaluateCox(nextBeta, x, outcomes, strata);
+      if (Number.isFinite(next.logLikelihood) && next.logLikelihood >= current.logLikelihood - 1e-10) {
+        beta = nextBeta;
+        current = next;
+        accepted = true;
+        break;
+      }
+      step /= 2;
+    }
+    if (!accepted || beta.some((v) => Math.abs(v) > 30)) throw new Error("Cox model did not converge; possible separation");
+  }
+  if (!converged && p && Math.max(...current.score.map(Math.abs)) >= 1e-7) throw new Error("Cox model did not converge");
+  const covariance = invert(current.information);
+  if (covariance.some((r, i) => r[i] <= 0 || r[i] > 1e10)) throw new Error("Unstable Cox fit");
+  return { columns, beta, covariance, logLikelihood: current.logLikelihood, nullLogLikelihood, wald: dot(beta, multiply(current.information, beta)), outcomes, x, strata };
+}
+function concordance(outcomes, risks, strata) {
+  let pairs = 0, correct = 0;
+  for (let i = 0; i < outcomes.length; i++) for (let j = i + 1; j < outcomes.length; j++) {
+    const a = outcomes[i], b = outcomes[j];
+    if (strata && strata[a.sample_id] !== strata[b.sample_id]) continue;
+    const early = a.time < b.time && a.event === 1 ? i : b.time < a.time && b.event === 1 ? j : void 0;
+    if (early === void 0) continue;
+    const late = early === i ? j : i;
+    pairs++;
+    correct += risks[early] === risks[late] ? 0.5 : Number(risks[early] > risks[late]);
+  }
+  return pairs ? correct / pairs : void 0;
+}
+function logRankObserved(outcomes, groups, strata) {
+  const rows = outcomes.filter((o) => groups[o.sample_id] && (!strata || strata[o.sample_id])), names = [...new Set(rows.map((o) => groups[o.sample_id]))].sort(), p = names.length - 1;
+  if (p < 1) return null;
+  const u = Array(p).fill(0), v = Array.from({ length: p }, () => Array(p).fill(0));
+  for (const stratum of new Set(rows.map((o) => strata?.[o.sample_id] ?? "all"))) {
+    const members = rows.filter((o) => (strata?.[o.sample_id] ?? "all") === stratum);
+    for (const time of new Set(members.filter((o) => o.event === 1).map((o) => o.time))) {
+      const risk = members.filter((o) => o.time >= time), deaths = members.filter((o) => o.time === time && o.event === 1), n = risk.length, d = deaths.length;
+      if (n <= 1) continue;
+      const prop = names.slice(0, p).map((g) => risk.filter((o) => groups[o.sample_id] === g).length / n), factor = d * (n - d) / (n - 1);
+      for (let j = 0; j < p; j++) {
+        u[j] += deaths.filter((o) => groups[o.sample_id] === names[j]).length - d * prop[j];
+        for (let k = 0; k < p; k++) v[j][k] += factor * ((j === k ? prop[j] : 0) - prop[j] * prop[k]);
+      }
+    }
+  }
+  try {
+    const chiSquare = Math.max(0, dot(u, multiply(invert(v), u)));
+    return { chiSquare, pValue: chiSquareTail(chiSquare, p), degreesOfFreedom: p };
+  } catch {
+    return null;
+  }
+}
+
+// src/lib/coxphAnalysis.ts
+import stats2 from "npm:jstat@^1.9.6";
+function resultFromFit(fit) {
+  const covariates = fit.columns.map((c, i) => {
+    const coefficient = fit.beta[i] / c.scale, se = Math.sqrt(fit.covariance[i][i]) / c.scale, pValue = chiSquareTail((coefficient / se) ** 2, 1);
+    return { name: c.name, coefficient, se, pValue, hazardRatio: Math.exp(coefficient), lowerCI: Math.exp(coefficient - 1.96 * se), upperCI: Math.exp(coefficient + 1.96 * se), pValueBonferroni: Math.min(1, pValue * fit.columns.length), pValueFDR: pValue };
+  });
+  const sorted = [...covariates].sort((a, b) => a.pValue - b.pValue);
+  let previous = 1;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    previous = Math.min(previous, sorted[i].pValue * sorted.length / (i + 1));
+    sorted[i].pValueFDR = previous;
+  }
+  return { covariates, waldTest: { chiSquare: fit.wald, df: fit.columns.length, pValue: chiSquareTail(fit.wald, fit.columns.length) }, logLikelihood: fit.logLikelihood, concordance: concordance(fit.outcomes, fit.x.map((x) => dot(x, fit.beta)), Object.fromEntries(fit.outcomes.map((o, i) => [o.sample_id, fit.strata[i]]))), fit, termNames: [...new Set(fit.columns.map((c) => c.term))] };
+}
+function multivariateCoxPH(outcomes, data, _groups, _counts, strata) {
+  try {
+    return resultFromFit(fitCox(completeCohort(outcomes, data), data, strata));
+  } catch {
+    return null;
+  }
+}
+function observedGroupCox(outcomes, groups, strata) {
+  const matched = outcomes.filter((o) => groups[o.sample_id] && (!strata || strata[o.sample_id]));
+  const categorical = Object.fromEntries(Object.entries(groups).map(([id, g]) => [id, `group:${g}`]));
+  const model = multivariateCoxPH(matched, { group: categorical }, void 0, void 0, strata);
+  if (!model) return null;
+  const levels = [...new Set(matched.map((o) => groups[o.sample_id]))].sort();
+  return { referenceGroup: levels[0], groups: model.covariates.map((c, i) => ({ ...c, subtype: levels[i + 1] })), waldTest: model.waldTest };
+}
+
+// src/lib/mcp/tools/get-survival-stats.ts
 var get_survival_stats_default = defineTool5({
   name: "get_survival_stats",
   title: "Get survival statistics",
   description: "Return log-rank p-value and Cox PH hazard ratios / CIs for one saved analysis.",
-  inputSchema: { analysisId: z4.string() },
+  inputSchema: { analysisId: z5.string() },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ analysisId }, ctx) => {
     const err = requireAuth(ctx);
     if (err) return err;
     const sb = supabaseForUser(ctx);
-    const { data, error } = await sb.from("analyses").select("survival_pvalue, cox_ph_results").eq("id", analysisId).maybeSingle();
+    const { data, error } = await sb.from("analyses").select("survival_pvalue, cox_ph_results,document").eq("id", analysisId).maybeSingle();
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     if (!data) return { content: [{ type: "text", text: "Analysis not found" }], isError: true };
+    let survival = { survival_pvalue: data.survival_pvalue, cox_ph_results: data.cox_ph_results, source: "precomputed" };
+    if (data.document) {
+      try {
+        const doc = normalizeAnalysis(data.document), groups = Object.fromEntries(doc.samples.map((s) => [s.sample_id, s.subtype]));
+        const observed = doc.rawSurvivalData ?? [];
+        survival = { survival_pvalue: doc.survival_pvalue ?? logRankObserved(observed, groups)?.pValue ?? null, cox_ph_results: doc.coxPHResults ?? observedGroupCox(observed, groups), source: doc.coxPHResults ? "precomputed" : "individual outcomes" };
+      } catch {
+        return { content: [{ type: "text", text: "Saved analysis is invalid; re-import original JSON" }], isError: true };
+      }
+    }
     return {
-      content: [{ type: "text", text: JSON.stringify(data, null, 2) }],
-      structuredContent: { survival: data }
+      content: [{ type: "text", text: JSON.stringify(survival, null, 2) }],
+      structuredContent: { survival }
     };
   }
 });
@@ -164,13 +452,14 @@ var get_survival_stats_default = defineTool5({
 // src/lib/mcp/index.ts
 var projectRef = "zvxbojnduszonnmlvojf";
 var mcp_default = defineMcp({
-  name: "nmf-subtyping-mcp",
-  title: "NMF Molecular Subtyping",
+  name: "nmf-subtype-explorer",
+  title: "NMF Subtype Explorer",
   version: "0.1.0",
   instructions: "Access the signed-in user's saved NMF molecular subtyping analyses from the AccelBio dashboard. Start with `list_analyses` to find an analysis id, then call `get_analysis_summary`, `get_marker_genes`, or `get_survival_stats` for details.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
-    acceptedAudiences: "authenticated"
+    acceptedAudiences: "authenticated",
+    requireOAuthClientClaim: true
   }),
   tools: [whoami_default, list_analyses_default, get_analysis_summary_default, get_marker_genes_default, get_survival_stats_default]
 });

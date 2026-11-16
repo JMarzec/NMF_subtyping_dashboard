@@ -46,7 +46,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
       setExcludedSubtypes(new Set());
       setExcludedAnnotationValues(new Set());
     }
-  }, [filterResetKey]);
+  }, [filterResetKey,setExcludedSubtypes,setExcludedAnnotationValues]);
 
   // Check if selected annotation is numeric
   const isNumericAnnotation = useMemo(() => {
@@ -254,7 +254,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
         <CardTitle className="text-lg">Sample Clustering (PCA)</CardTitle>
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Label className="text-xs text-muted-foreground">NMF Scores</Label>
             <Switch
               checked={dataSource === "expression"}
@@ -340,7 +340,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
         {/* Legend with clickable items or continuous color bar */}
         <div className="flex flex-wrap gap-4 mt-4 justify-center">
           {selectedAnnotation && isNumericAnnotation && continuousColorScale ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground font-medium">{selectedAnnotation}:</span>
               <span className="text-xs text-muted-foreground">{continuousColorScale.min.toFixed(1)}</span>
               <div 
