@@ -27,7 +27,7 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filter
       setExcludedSubtypes(new Set());
       setExcludedAnnotationValues(new Set());
     }
-  }, [filterResetKey]);
+  }, [filterResetKey,setExcludedSubtypes,setExcludedAnnotationValues]);
 
   // Check if selected annotation is numeric
   const isNumericAnnotation = useMemo(() => {

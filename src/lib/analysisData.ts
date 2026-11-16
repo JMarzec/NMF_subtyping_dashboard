@@ -50,6 +50,7 @@ export function normalizeAnalysis(value: unknown): AnalysisData {
     rawSurvivalData: Array.isArray(outcomes) ? outcomes.map(o => { const r = object(o); return { ...r, sample_id: r.sample_id ?? r.sampleId, event: r.event === true ? 1 : r.event === false ? 0 : r.event }; }) : outcomes,
   }) as AnalysisData;
   const ids = data.samples.map(s => s.sample_id);
+  const sampleMap=new Map(data.samples.map(s=>[s.sample_id,s.subtype]));
   unique(ids, "sample IDs");
   const counts: Record<string, number> = {};
   data.samples.forEach(s => { counts[s.subtype] = (counts[s.subtype] ?? 0) + 1; });
@@ -58,12 +59,17 @@ export function normalizeAnalysis(value: unknown): AnalysisData {
     const h = data.heatmapData;
     unique(h.samples, "heatmap sample IDs"); unique(h.genes, "heatmap gene names");
     if (h.values.length !== h.genes.length || h.sampleSubtypes.length !== h.samples.length || h.values.some(row => row.length !== h.samples.length)) throw new Error("Heatmap dimensions do not match labels");
-    if (h.samples.some((id,i) => !ids.includes(id) || data.samples.find(s => s.sample_id === id)?.subtype !== h.sampleSubtypes[i])) throw new Error("Heatmap samples do not match the analysis");
+    if (h.samples.some((id,i) => sampleMap.get(id)!==h.sampleSubtypes[i])) throw new Error("Heatmap samples do not match the analysis");
   }
   data.survivalData?.forEach(group => {
     let previousTime = -1, previousSurvival = 1;
-    group.timePoints.forEach(p => { if (p.time <= previousTime || p.survival > previousSurvival) throw new Error("Survival curves must have increasing times and nonincreasing survival"); previousTime = p.time; previousSurvival = p.survival; });
+    group.timePoints.forEach(p => { if (p.time <= previousTime || p.survival > previousSurvival) throw new Error("Survival curves must have increasing times and nonincreasing survival"); if(p.lowerCI!==undefined&&p.lowerCI>p.survival||p.upperCI!==undefined&&p.upperCI<p.survival)throw new Error("Survival confidence bounds must contain survival"); previousTime = p.time; previousSurvival = p.survival; });
   });
+  unique(data.survivalData?.map(g=>g.subtype)??[],"survival groups");
+  unique(data.markerGenes.map(g=>JSON.stringify([g.subtype,g.gene])),"marker genes within subtype");
+  if(data.markerGenes.some(g=>!Object.hasOwn(counts,g.subtype)))throw new Error("Marker genes contain unknown subtypes");
+  if(data.annotations&&Object.keys(data.annotations.annotations).some(id=>!sampleMap.has(id)))throw new Error("Annotations contain unknown samples");
+  data.coxPHResults?.groups.forEach(g=>{if(g.lowerCI>g.hazardRatio||g.upperCI<g.hazardRatio)throw new Error("Cox confidence bounds must contain the hazard ratio");});
   if (data.rawSurvivalData) { unique(data.rawSurvivalData.map(o => o.sample_id), "survival sample IDs"); if (data.rawSurvivalData.some(o => !ids.includes(o.sample_id))) throw new Error("Survival outcomes contain unknown samples"); }
   return data;
 }

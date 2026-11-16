@@ -122,7 +122,7 @@ export const CrossValidationPanel = ({ result, selectedCovariates }: CrossValida
                 </div>
               </div>
               <div className="p-3 bg-muted/50 rounded-md col-span-2">
-                <div className="text-xs text-muted-foreground">95% Confidence Interval</div>
+                <div className="text-xs text-muted-foreground">Approximate 95% fold interval</div>
                 <div className="text-lg font-bold text-foreground">
                   {result.ci95Lower.toFixed(3)} – {result.ci95Upper.toFixed(3)}
                 </div>

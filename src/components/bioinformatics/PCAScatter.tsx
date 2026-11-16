@@ -46,7 +46,7 @@ export const PCAScatter = ({ samples, subtypeColors, userAnnotations, heatmapDat
       setExcludedSubtypes(new Set());
       setExcludedAnnotationValues(new Set());
     }
-  }, [filterResetKey]);
+  }, [filterResetKey,setExcludedSubtypes,setExcludedAnnotationValues]);
 
   // Check if selected annotation is numeric
   const isNumericAnnotation = useMemo(() => {

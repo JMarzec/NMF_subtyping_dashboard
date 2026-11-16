@@ -102,6 +102,7 @@ export const SurvivalCurve = ({
   const [stratifyBy, setStratifyBy] = useState<string>("none");
   const [selectedCovariates, setSelectedCovariates] = useState<string[]>([]);
   const chartRef = useRef<HTMLDivElement>(null);
+  const eligibleOutcomes=useMemo(()=>rawSurvivalData.filter(o=>stratifyBy==="none"||userAnnotations?.annotations[o.sample_id]?.[stratifyBy]),[rawSurvivalData,stratifyBy,userAnnotations]);
 
   const handleDownloadPNG = () => {
     downloadChartAsPNG(chartRef.current, "survival-curve");
@@ -260,6 +261,7 @@ export const SurvivalCurve = ({
     });
 
     const result = stepwiseSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05, 0.10);
+    if(!result.steps.length){toast.info("No covariates entered the stepwise model; check individual outcomes and predictors");}
     setStepwiseSelectionResult(result);
     setForwardSelectionResult(null);
     setBackwardEliminationResult(null);
@@ -456,7 +458,7 @@ export const SurvivalCurve = ({
     // Process each subtype - ensure monotonic decreasing survival
     const processedData = effectiveData.map(group => {
       const subtype = group.subtype;
-      const n = group.nTotal || effectiveCounts?.[subtype] || 100;
+      const n = group.nTotal ?? effectiveCounts?.[subtype];
       
       // Add initial point at time 0 with survival 1 if not present
       const points = [...group.timePoints];
@@ -600,7 +602,7 @@ export const SurvivalCurve = ({
       const row: Record<string, number | string> = { time: t };
       processedData.forEach(group => {
         if(rawSurvivalData.length) {
-          row[group.subtype]=rawSurvivalData.filter(o=>groupAssignments[o.sample_id]===group.subtype && o.time>=t).length;
+          row[group.subtype]=eligibleOutcomes.filter(o=>groupAssignments[o.sample_id]===group.subtype && o.time>=t).length;
         } else {
           const next=group.points.find(p=>p.time>=t);
           if(next?.atRisk!==undefined)row[group.subtype]=next.atRisk;
@@ -617,7 +619,7 @@ export const SurvivalCurve = ({
       maxTime: maxT,
       riskTableData: riskTable
     };
-  }, [effectiveData, effectiveCounts, rawSurvivalData, groupAssignments]);
+  }, [effectiveData, effectiveCounts, rawSurvivalData, groupAssignments,eligibleOutcomes]);
 
   if (effectiveData.length === 0) {
     return (
