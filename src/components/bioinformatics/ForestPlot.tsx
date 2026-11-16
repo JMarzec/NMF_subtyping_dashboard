@@ -140,7 +140,7 @@ export const ForestPlot = ({
 
   return (
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+      <CardHeader className="flex flex-row flex-wrap gap-3 items-center justify-between space-y-0 pb-2">
         <div className="flex items-center gap-3">
           <CardTitle className="text-lg">{title}</CardTitle>
           <TooltipProvider>
@@ -176,8 +176,8 @@ export const ForestPlot = ({
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
-        <div ref={chartRef} className="bg-card p-4 rounded-md">
+      <CardContent className="overflow-x-auto">
+        <div ref={chartRef} className="bg-card p-4 rounded-md min-w-[640px]">
           {/* Header row */}
           <div className="flex items-center text-xs font-medium text-muted-foreground mb-2 border-b pb-2">
             <div className="w-32 shrink-0">Subtype</div>
