@@ -90,10 +90,11 @@ export function fitCox(outcomes: SurvivalObservation[], data: CovariateData, str
   return {columns,beta,covariance,logLikelihood:current.logLikelihood,nullLogLikelihood,wald:dot(beta,multiply(current.information,beta)),outcomes,x,strata};
 }
 
-export function concordance(outcomes: SurvivalObservation[], risks: number[]): number | undefined {
+export function concordance(outcomes: SurvivalObservation[], risks: number[],strata?:Record<string,string>): number | undefined {
   let pairs=0,correct=0;
   for(let i=0;i<outcomes.length;i++)for(let j=i+1;j<outcomes.length;j++){
     const a=outcomes[i],b=outcomes[j];
+    if(strata&&strata[a.sample_id]!==strata[b.sample_id])continue;
     const early=a.time<b.time&&a.event===1?i:b.time<a.time&&b.event===1?j:undefined;
     if(early===undefined)continue;
     const late=early===i?j:i; pairs++; correct+=risks[early]===risks[late]?0.5:Number(risks[early]>risks[late]);

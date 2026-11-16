@@ -159,8 +159,8 @@ export const SurvivalCurve = ({
       });
     });
 
-    return multivariateCoxPH(rawSurvivalData, covariateData, sampleSubtypes, subtypeCounts);
-  }, [selectedCovariates, userAnnotations, sampleSubtypes, rawSurvivalData, subtypeCounts]);
+    return multivariateCoxPH(eligibleOutcomes, covariateData, sampleSubtypes, subtypeCounts,strata);
+  }, [selectedCovariates, userAnnotations, sampleSubtypes, eligibleOutcomes, subtypeCounts,strata]);
 
   // Stepwise model comparison using likelihood ratio tests
   const modelComparisons = useMemo((): ModelComparisonResult[] => {
@@ -180,8 +180,8 @@ export const SurvivalCurve = ({
       });
     });
 
-    return stepwiseModelComparison(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts);
-  }, [selectedCovariates, userAnnotations, sampleSubtypes, rawSurvivalData, subtypeCounts]);
+    return stepwiseModelComparison(eligibleOutcomes, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts,strata);
+  }, [selectedCovariates, userAnnotations, sampleSubtypes, eligibleOutcomes, subtypeCounts,strata]);
 
   // Backward elimination result
   const [backwardEliminationResult, setBackwardEliminationResult] = useState<BackwardEliminationResult | null>(null);
@@ -212,7 +212,7 @@ export const SurvivalCurve = ({
       });
     });
 
-    const result = backwardElimination(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 0.05);
+    const result = backwardElimination(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 0.05,strata);
     if(!result.steps.length) { toast.error("Model unavailable: check events, missing values and redundant predictors"); return; }
     setBackwardEliminationResult(result);
     setForwardSelectionResult(null);
@@ -236,7 +236,7 @@ export const SurvivalCurve = ({
       });
     });
 
-    const result = forwardSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05);
+    const result = forwardSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05,strata);
     if(!result.steps.length) { toast.error("Model unavailable: check individual outcomes and predictors"); return; }
     setForwardSelectionResult(result);
     setBackwardEliminationResult(null);
@@ -260,7 +260,7 @@ export const SurvivalCurve = ({
       });
     });
 
-    const result = stepwiseSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05, 0.10);
+    const result = stepwiseSelection(rawSurvivalData, covariateData, sampleSubtypes, annotationColumns, subtypeCounts, 0.05, 0.10,strata);
     if(!result.steps.length){toast.info("No covariates entered the stepwise model; check individual outcomes and predictors");}
     setStepwiseSelectionResult(result);
     setForwardSelectionResult(null);
@@ -284,7 +284,7 @@ export const SurvivalCurve = ({
       });
     });
 
-    const result = crossValidateConcordance(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 5);
+    const result = crossValidateConcordance(rawSurvivalData, covariateData, sampleSubtypes, selectedCovariates, subtypeCounts, 5,strata);
     if(!result.concordanceScores.length)toast.error("Cross-validation unavailable: insufficient comparable outcomes or a fold could not be fitted");
     setCrossValidationResult(result);
   };

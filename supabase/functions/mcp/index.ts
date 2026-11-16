@@ -350,10 +350,11 @@ function fitCox(outcomes, data, strataMap = {}) {
   if (covariance.some((r, i) => r[i] <= 0 || r[i] > 1e10)) throw new Error("Unstable Cox fit");
   return { columns, beta, covariance, logLikelihood: current.logLikelihood, nullLogLikelihood, wald: dot(beta, multiply(current.information, beta)), outcomes, x, strata };
 }
-function concordance(outcomes, risks) {
+function concordance(outcomes, risks, strata) {
   let pairs = 0, correct = 0;
   for (let i = 0; i < outcomes.length; i++) for (let j = i + 1; j < outcomes.length; j++) {
     const a = outcomes[i], b = outcomes[j];
+    if (strata && strata[a.sample_id] !== strata[b.sample_id]) continue;
     const early = a.time < b.time && a.event === 1 ? i : b.time < a.time && b.event === 1 ? j : void 0;
     if (early === void 0) continue;
     const late = early === i ? j : i;
@@ -399,7 +400,7 @@ function resultFromFit(fit) {
     previous = Math.min(previous, sorted[i].pValue * sorted.length / (i + 1));
     sorted[i].pValueFDR = previous;
   }
-  return { covariates, waldTest: { chiSquare: fit.wald, df: fit.columns.length, pValue: chiSquareTail(fit.wald, fit.columns.length) }, logLikelihood: fit.logLikelihood, concordance: concordance(fit.outcomes, fit.x.map((x) => dot(x, fit.beta))), fit, termNames: [...new Set(fit.columns.map((c) => c.term))] };
+  return { covariates, waldTest: { chiSquare: fit.wald, df: fit.columns.length, pValue: chiSquareTail(fit.wald, fit.columns.length) }, logLikelihood: fit.logLikelihood, concordance: concordance(fit.outcomes, fit.x.map((x) => dot(x, fit.beta)), Object.fromEntries(fit.outcomes.map((o, i) => [o.sample_id, fit.strata[i]]))), fit, termNames: [...new Set(fit.columns.map((c) => c.term))] };
 }
 function multivariateCoxPH(outcomes, data, _groups, _counts, strata) {
   try {
