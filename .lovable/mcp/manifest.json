@@ -5,15 +5,16 @@
   "auth": {
     "type": "oauth",
     "issuer": "https://zvxbojnduszonnmlvojf.supabase.co/auth/v1",
+    "require_oauth_client_claim": true,
     "accepted_audiences": [
       "authenticated"
     ]
   },
   "mcp": {
     "server": {
-      "name": "nmf-subtyping-mcp",
+      "name": "nmf-subtype-explorer",
       "version": "0.1.0",
-      "title": "NMF Molecular Subtyping"
+      "title": "NMF Subtype Explorer"
     },
     "tools": [
       {
