@@ -17,13 +17,7 @@ const calculateSilhouetteScore = (samples: SampleResult[]): number => {
 
   // Extract score vectors
   const getScoreVector = (sample: SampleResult): number[] => {
-    const scores: number[] = [];
-    Object.entries(sample).forEach(([key, value]) => {
-      if (key.startsWith("score_") && typeof value === "number") {
-        scores.push(value);
-      }
-    });
-    return scores.length > 0 ? scores : [0];
+    return scoreVector(sample);
   };
 
   const euclidean = (a: number[], b: number[]): number => {
@@ -131,13 +125,7 @@ const calculateCalinskiHarabaszIndex = (samples: SampleResult[]): number => {
   if (subtypes.length < 2) return 0;
 
   const getScoreVector = (sample: SampleResult): number[] => {
-    const scores: number[] = [];
-    Object.entries(sample).forEach(([key, value]) => {
-      if (key.startsWith("score_") && typeof value === "number") {
-        scores.push(value);
-      }
-    });
-    return scores.length > 0 ? scores : [0];
+    return scoreVector(sample);
   };
 
   const vectors = samples.map(getScoreVector);
@@ -192,6 +180,7 @@ const calculateCalinskiHarabaszIndex = (samples: SampleResult[]): number => {
 
 export const ClusteringMetrics = ({ samples }: ClusteringMetricsProps) => {
   const metrics = useMemo(() => {
+    if(!nmfVectors(samples).length)return {silhouette:0,daviesBouldin:0,calinskiHarabasz:0,numClusters:0};
     const silhouette = calculateSilhouetteScore(samples);
     const daviesBouldin = calculateDaviesBouldinIndex(samples);
     const calinskiHarabasz = calculateCalinskiHarabaszIndex(samples);
