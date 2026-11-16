@@ -175,7 +175,7 @@ function normalizeAnalysis(value) {
   });
   unique(data.survivalData?.map((g) => g.subtype) ?? [], "survival groups");
   unique(data.markerGenes.map((g) => JSON.stringify([g.subtype, g.gene])), "marker genes within subtype");
-  if (data.markerGenes.some((g) => !Object.hasOwn(counts, g.subtype))) throw new Error("Marker genes contain unknown subtypes");
+  if (data.markerGenes.some((g) => !Object.prototype.hasOwnProperty.call(counts, g.subtype))) throw new Error("Marker genes contain unknown subtypes");
   if (data.annotations && Object.keys(data.annotations.annotations).some((id) => !sampleMap.has(id))) throw new Error("Annotations contain unknown samples");
   data.coxPHResults?.groups.forEach((g) => {
     if (g.lowerCI > g.hazardRatio || g.upperCI < g.hazardRatio) throw new Error("Cox confidence bounds must contain the hazard ratio");
