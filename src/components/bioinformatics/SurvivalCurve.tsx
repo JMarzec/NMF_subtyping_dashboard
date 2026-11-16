@@ -647,7 +647,7 @@ export const SurvivalCurve = ({
             {rawSurvivalData.length > 0 && annotationColumns.length > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Group by:</span>
-                <Select value={groupBy} onValueChange={(v) => { setGroupBy(v); if (v !== "nmf_subtype") setStratifyBy("none"); }}>
+                <Select value={groupBy} onValueChange={(v) => { setGroupBy(v); if (v !== "nmf_subtype") setStratifyBy("none"); clearAllCovariates(); }}>
                   <SelectTrigger className="w-[150px] h-8 text-xs">
                     <SelectValue />
                   </SelectTrigger>
@@ -665,7 +665,7 @@ export const SurvivalCurve = ({
             {rawSurvivalData.length > 0 && annotationColumns.length > 0 && groupBy === "nmf_subtype" && (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground">Stratify by:</span>
-                <Select value={stratifyBy} onValueChange={setStratifyBy}>
+                <Select value={stratifyBy} onValueChange={(v)=>{setStratifyBy(v);setBackwardEliminationResult(null);setForwardSelectionResult(null);setStepwiseSelectionResult(null);setCrossValidationResult(null);}}>
                   <SelectTrigger className="w-[150px] h-8 text-xs">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>

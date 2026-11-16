@@ -201,7 +201,8 @@ const Index = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <JsonUploader onDataLoaded={handleDataLoaded} />
           <AnnotationUploader key={filterResetKey}
-            onRemove={() => setUserAnnotations(undefined)}
+            value={userAnnotations}
+            onRemove={() => {setUserAnnotations(undefined);setFilterResetKey(k=>k+1);}}
             onAnnotationLoaded={handleAnnotationLoaded} 
             sampleIds={sampleIds}
           />
