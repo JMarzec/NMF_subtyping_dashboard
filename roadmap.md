@@ -1,4 +1,5 @@
 # Confirmed issue repairs
+- [ ] Sweep all model actions, plot filters, export/readback and account routes for consistency; verify desktop/phone in both themes.
 - [x] Validate and preserve imports and annotations; use a clearly labeled validated example instead of random fallback data.
 - [x] Joint Cox/Efron fitting, valid LRT/AIC, individual concordance, training-only CV selection and covariance-aware stratified log-rank; independent reference tests pass.
 - [x] Transactional canonical-document saves, checked readbacks and paginated saved/agent reads.

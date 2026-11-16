@@ -232,7 +232,7 @@ const Index = () => {
         </div>
 
         {/* Clustering Metrics - Below NMF Overview */}
-        <ClusteringMetrics samples={data.samples} />
+        <ClusteringMetrics samples={data.samples} annotations={userAnnotations?.annotations} />
 
         {/* UMAP Cluster - Full Width */}
         <div ref={clusterScatterRef}>
@@ -257,7 +257,7 @@ const Index = () => {
 
         {/* PCA Scree Plot - Full Width */}
         <div ref={pcaScreeRef}>
-          <PCAScreePlot heatmapData={heatmapData} samples={data.samples} />
+          <PCAScreePlot heatmapData={heatmapData} samples={data.samples} annotations={userAnnotations?.annotations} />
         </div>
 
         {/* Expression Heatmap - Full Width */}

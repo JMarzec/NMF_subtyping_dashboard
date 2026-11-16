@@ -2,10 +2,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SampleResult } from "@/data/mockNmfData";
 import { useMemo } from "react";
 import {nmfVectors} from "@/lib/dimensionality";
+import {usePlotFilters} from "./PlotFilters";
+import {plotCohort} from "@/lib/plotCohort";
 const scoreVector=(s:SampleResult)=>Object.keys(s).filter(k=>k.startsWith("score_")).sort().map(k=>Number(s[k]));
 
 interface ClusteringMetricsProps {
   samples: SampleResult[];
+  annotations?:Record<string,Record<string,string>>;
 }
 
 // Calculate silhouette score for clustering
@@ -178,7 +181,9 @@ const calculateCalinskiHarabaszIndex = (samples: SampleResult[]): number => {
   return (bgss / (k - 1)) / (wgss / (n - k));
 };
 
-export const ClusteringMetrics = ({ samples }: ClusteringMetricsProps) => {
+export const ClusteringMetrics = ({ samples:allSamples,annotations }: ClusteringMetricsProps) => {
+  const filters=usePlotFilters();
+  const samples=useMemo(()=>plotCohort(allSamples,filters.excludedSubtypes,filters.selectedAnnotation,filters.excludedAnnotationValues,annotations),[allSamples,filters.excludedSubtypes,filters.selectedAnnotation,filters.excludedAnnotationValues,annotations]);
   const metrics = useMemo(() => {
     if(!nmfVectors(samples).length)return {silhouette:0,daviesBouldin:0,calinskiHarabasz:0,numClusters:0};
     const silhouette = calculateSilhouetteScore(samples);
