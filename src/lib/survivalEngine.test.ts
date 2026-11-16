@@ -57,6 +57,11 @@ describe("Observed survival inference",()=>{
     const a=logRankObserved(rows,groups),b=logRankObserved([...rows].reverse(),Object.fromEntries(Object.entries(groups).map(([id,g])=>[id,{A:'C',B:'A',C:'B'}[g]])));
     expect(a?.degreesOfFreedom).toBe(2);expect(a?.chiSquare).toBeCloseTo(b?.chiSquare??-1,10);
   });
+  test("stratified log-rank pools scores and covariance within strata",()=>{
+    const rows:SurvivalObservation[]=[{sample_id:'a',time:1,event:1},{sample_id:'b',time:2,event:1},{sample_id:'c',time:1,event:1},{sample_id:'d',time:3,event:1}];
+    const result=logRankObserved(rows,{a:'A',b:'B',c:'A',d:'B'},{a:'one',b:'one',c:'two',d:'two'});
+    expect(result?.chiSquare).toBeCloseTo(2,12);expect(result?.degreesOfFreedom).toBe(1);
+  });
   test("backward elimination may remove the final nonsignificant term",()=>{
     const rows:SurvivalObservation[]=Array.from({length:40},(_,i)=>({sample_id:`r${i}`,time:Math.floor(i/2)+1,event:1}));
     const noise=Object.fromEntries(rows.map((o,i)=>[o.sample_id,i%2]));

@@ -1,7 +1,11 @@
 # Confirmed issue repairs
-- [ ] Validate and preserve imported samples, markers, outcomes and annotations; remove implicit demo data.
-- [ ] Replace unsupported survival inference with joint Cox fitting, valid LRT, concordance, fold-isolated CV and covariance-aware log-rank.
-- [ ] Make saving atomic and lossless; check responses and paginate saved/agent reads.
-- [ ] Correct embeddings, Ward clustering, large heatmap handling and complete exports.
-- [ ] Resolve auth callback failures, lint defects and duplicated data/statistical paths.
-- [ ] Add regression tests and verify public and signed-in flows; document external blockers.
+- [x] Validate and preserve imports and annotations; use a clearly labeled validated example instead of random fallback data.
+- [x] Joint Cox/Efron fitting, valid LRT/AIC, individual concordance, training-only CV selection and covariance-aware stratified log-rank; independent reference tests pass.
+- [x] Transactional canonical-document saves, checked readbacks and paginated saved/agent reads.
+- [x] Library-based PCA/UMAP/Ward, worker clustering, canvas heatmap and complete SVG batch exports.
+- [x] Bounded auth callback recovery, canonical return paths and zero lint errors (framework hot-reload export warnings remain).
+- [x] Regression tests and real imported-data browser flow: annotations, selection, malformed imports, SVG ZIP and callback recovery; no page errors.
+- [ ] Signed-in save/load and OAuth approve/deny verification: blocked because the project has no auth users; user must create an account and sign in.
+- [ ] Published MCP revision verification: blocked until user republishes after successful catalog extraction.
+- [ ] Password HIBP setting: scanner confirms off; user must enable More → Users → Auth settings → Email → Password HIBP Check (other hosted auth values are unknown, so bundled configuration was not overwritten).
+- [ ] Comprehensive deep security verification: no recent deep scan; connector scan remains incomplete. Run from Security tab.
