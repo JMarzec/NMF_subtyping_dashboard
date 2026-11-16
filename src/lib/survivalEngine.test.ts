@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import reference from "./fixtures/cox-efron.json";
 import { completeCohort, fitCox, concordance, kaplanMeier, logRankObserved } from "./survivalEngine";
-import { resultFromFit, compareNestedModels, backwardElimination, crossValidateConcordance,observedGroupCox } from "./coxphAnalysis";
+import { resultFromFit, compareNestedModels, backwardElimination, crossValidateConcordance,observedGroupCox,stepwiseModelComparison } from "./coxphAnalysis";
 import type { SurvivalObservation } from "./analysisData";
 const outcomes = reference.outcomes as SurvivalObservation[];
 const data = reference.covariates;
@@ -10,6 +10,14 @@ describe("Observed survival inference",()=>{
     const fit=fitCox(outcomes,data,reference.stratifiedExpected.strata);
     fit.beta.forEach((b,i)=>expect(b/fit.columns[i].scale).toBeCloseTo(reference.stratifiedExpected.beta[i],6));
     expect(fit.logLikelihood).toBeCloseTo(reference.stratifiedExpected.logLikelihood,6);
+  });
+  test("model comparisons preserve the selected strata",()=>{
+    const comparisons=stepwiseModelComparison(outcomes,data,{},Object.keys(data),undefined,reference.stratifiedExpected.strata);
+    expect(comparisons.at(-1)?.fullModel.logLikelihood).toBeCloseTo(reference.stratifiedExpected.logLikelihood,6);
+  });
+  test("stratified concordance does not compare different baselines",()=>{
+    const rows:SurvivalObservation[]=[{sample_id:'a',time:1,event:1},{sample_id:'b',time:2,event:1},{sample_id:'c',time:3,event:1},{sample_id:'d',time:4,event:0}];
+    expect(concordance(rows,[2,1,100,99],{a:'one',b:'one',c:'two',d:'two'})).toBe(1);
   });
   test("numeric group labels remain a categorical factor",()=>{
     const numeric=Object.fromEntries(Object.entries(data.category).map(([id,c])=>[id,{A:'1',B:'2',C:'3'}[c]]));
