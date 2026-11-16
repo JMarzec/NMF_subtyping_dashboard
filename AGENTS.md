@@ -3,3 +3,7 @@
 - Infer survival statistics only from individual observed outcomes or supplied validated statistics, never reconstructed subtype mixtures.
 - Persist analyses through a transactional user-scoped operation and keep full canonical payloads for lossless restoration.
 - Keep regression tests beside data and numerical utilities; compare numerical results with independent reference fixtures.
+- Use a shared plot-filter provider so subtype and annotation exclusions apply consistently across visualizations.
+- Perform heatmap clustering in cancellable workers and render cells on canvas so large matrices do not block interaction.
+- Use the bundled validated example rather than generated fallback measurements so demo results have a traceable source.
+- Canonicalize authentication return paths once at each boundary so consent flows retain only same-origin destinations.

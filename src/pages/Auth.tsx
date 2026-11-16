@@ -8,20 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Helmet } from "react-helmet-async";
-
-function safeNext(raw: string | null): string {
-  if (!raw) return "/";
-  try {
-    if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
-    return raw;
-  } catch {
-    return "/";
-  }
-}
+import {oauthReturnPath} from "@/lib/oauthReturnPath";
 
 export default function AuthPage() {
   const [params] = useSearchParams();
-  const nextPath = safeNext(params.get("next"));
+  const nextPath = oauthReturnPath(params.get("next"));
   const nav = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");

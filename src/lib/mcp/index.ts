@@ -8,14 +8,15 @@ import getSurvivalStats from "./tools/get-survival-stats";
 const projectRef = import.meta.env.VITE_SUPABASE_PROJECT_ID ?? "project-ref-unset";
 
 export default defineMcp({
-  name: "nmf-subtyping-mcp",
-  title: "NMF Molecular Subtyping",
+  name: "nmf-subtype-explorer",
+  title: "NMF Subtype Explorer",
   version: "0.1.0",
   instructions:
     "Access the signed-in user's saved NMF molecular subtyping analyses from the AccelBio dashboard. Start with `list_analyses` to find an analysis id, then call `get_analysis_summary`, `get_marker_genes`, or `get_survival_stats` for details.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated",
+    requireOAuthClientClaim: true,
   }),
   tools: [whoami, listAnalyses, getAnalysisSummary, getMarkerGenes, getSurvivalStats],
 });
