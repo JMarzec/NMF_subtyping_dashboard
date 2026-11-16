@@ -189,7 +189,7 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filter
     <Card className="border-0 bg-card/50 backdrop-blur-sm">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 flex-wrap gap-2">
         <CardTitle className="text-lg">Sample Clustering (UMAP)</CardTitle>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {userAnnotations && userAnnotations.columns.length > 0 && (
             <AnnotationSelector
               columns={userAnnotations.columns}
@@ -252,7 +252,7 @@ export const ClusterScatter = ({ samples, subtypeColors, userAnnotations, filter
         {/* Legend with clickable items or continuous color bar */}
         <div className="flex flex-wrap gap-4 mt-4 justify-center">
           {selectedAnnotation && isNumericAnnotation && continuousColorScale ? (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground font-medium">{selectedAnnotation}:</span>
               <span className="text-xs text-muted-foreground">{continuousColorScale.min.toFixed(1)}</span>
               <div 
