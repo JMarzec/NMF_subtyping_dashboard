@@ -129,7 +129,7 @@ export const SurvivalCurve = ({
     const curves=isAnnotationGrouping || !data.length || stratifyBy!=="none" ? kaplanMeier(eligibleOutcomes,groupAssignments) : data;
     const counts=isAnnotationGrouping?Object.fromEntries(curves.map(g=>[g.subtype,g.nTotal ?? 0])):subtypeCounts;
     return {effectiveData:curves,effectiveColors:isAnnotationGrouping?generateAnnotationColors(curves.map(g=>g.subtype)):subtypeColors,effectiveCounts:counts,isAnnotationGrouping};
-  },[data,rawSurvivalData,eligibleOutcomes,stratifyBy,groupAssignments,groupBy,subtypeCounts,subtypeColors]);
+  },[data,eligibleOutcomes,stratifyBy,groupAssignments,groupBy,subtypeCounts,subtypeColors]);
   const strata=useMemo(()=>stratifyBy === "none" ? undefined : Object.fromEntries(Object.entries(userAnnotations?.annotations ?? {}).flatMap(([id,cols])=>cols[stratifyBy]?[[id,cols[stratifyBy]]]:[])),[stratifyBy,userAnnotations]);
   const isPrecomputedPValue=survivalPValue!==undefined && !isAnnotationGrouping && stratifyBy==="none";
   const isPrecomputedCoxPH=!!coxPHResults && !isAnnotationGrouping && stratifyBy==="none";
