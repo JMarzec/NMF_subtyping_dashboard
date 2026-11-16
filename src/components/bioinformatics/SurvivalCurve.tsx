@@ -1151,7 +1151,7 @@ export const SurvivalCurve = ({
         </div>
         
         {/* Data source legend */}
-        <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground">
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <Database className="h-3 w-3" />
             <span>= Pre-computed (R)</span>
